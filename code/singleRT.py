@@ -19,7 +19,6 @@ def extract_unitary(audio, string):
     except:
         return ''
 
-
 def extractMP3(musiqueInfo):
     audio = ID3(musiqueInfo['old_file_name'])
 
