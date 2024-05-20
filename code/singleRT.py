@@ -135,8 +135,28 @@ class MusiqueFile:
                 break
 
     def get_image_from_web(self):
-        create_ImageInList_from_web(self.Images, self.old_file_name, 10)
+        purged_name = self.old_file_name
+        purged_name = purged_name.replace(purged_name[purged_name.find('myfreemp3'):purged_name.find('myfreemp3') + len('myfreemp3') + 4], '')
+        purged_name = purged_name.replace('.mp3', '').replace('.flac', '')
+        create_ImageInList_from_web(self.Images, purged_name, 10)
+        create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
+        create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
 
+    def set_data_from_groupeediteurTag(self, groupeediteurTag):
+        self.Artiste = groupeediteurTag.zoneTextTitre.text()
+        self.Titre = groupeediteurTag.zoneTextTitre.text()
+        self.ArtisteDisplay = groupeediteurTag.zoneTextArtistAsDisplay.text()
+        self.ArtisteRemix = groupeediteurTag.zoneTextArtistRemix.text()
+        self.ArtisteFt = groupeediteurTag.zoneTextArtistFeaturing.text()
+        self.ArtisteAll = groupeediteurTag.zoneTextArtistAll.text()
+        self.Annee = groupeediteurTag.zoneTextAnnee.text()
+        self.Style = groupeediteurTag.zoneTextStyle.text()
+        self.Genre = groupeediteurTag.zoneTextGenre.text()
+        self.Disk = groupeediteurTag.zoneTextDisc.text()
+        self.Track = groupeediteurTag.zoneTextNum.text()
+        self.Album = groupeediteurTag.zoneTextAlbum.text()
+        self.ArtisteAlbum = groupeediteurTag.zoneTextAlbumArtist.text()
+        #self.Images = []
 
 class FlacFile(MusiqueFile):
     def __init__(self, old_file_name, path):
@@ -218,7 +238,7 @@ def download_and_handle_image(url, i, images_list):
         pixmap.loadFromData(image_data)
 
         # Créer une instance de ImageInList
-        image_from_web = ImageInList(str(i))
+        image_from_web = ImageInList(str(url))
         image_from_web.set_pixmap(pixmap)
 
         # Ajouter l'image à la liste
@@ -267,7 +287,11 @@ def download_and_handle_image_MARCHE_PAS(url, i, images_list):
 
 def create_ImageInList_from_web(Images, query, number_of_image):
     from qwant_search_image import qwant_get_image_urls
-    urls = qwant_get_image_urls(query, number_of_image)
+    try:
+        urls = qwant_get_image_urls(query, number_of_image)
+    except:
+        return
+
     i = 0
     for url in urls:
         try:
@@ -277,7 +301,14 @@ def create_ImageInList_from_web(Images, query, number_of_image):
             pass
 
 
+
 def get_object_from_list(item, object_list):
+    if item is not None:
+        for Objects in object_list:
+            if item.text() == Objects.get_name_in_list():
+                return Objects
+
+def set_Musique(item, object_list):
     if item is not None:
         for Objects in object_list:
             if item.text() == Objects.get_name_in_list():
@@ -305,6 +336,7 @@ class MainWindow(QDialog):
                 self.groupeListPistes.Pistes.append(musique_file)
                 self.groupeListPistes.ListPistes.addItem(files)
 
+
     def fill_groupeediteurTag_from_song_info(self, groupeediteurTag, song_info):
         groupeediteurTag.zoneTextTitre.setText(song_info.Titre)
         groupeediteurTag.zoneTextArtistAsDisplay.setText(song_info.ArtisteDisplay)
@@ -327,6 +359,13 @@ class MainWindow(QDialog):
             groupeImageViewer.ListImage.addItem(nametoplot)
 
     def clickMethodListePiste(self):
+        #Sauvegarde de ce qui a été rempli dans l'editeur de tag
+        if self.groupeListPistes.previousPiste is not None:
+            song_info = get_object_from_list(self.groupeListPistes.previousPiste, self.groupeListPistes.Pistes)
+            song_info.set_data_from_groupeediteurTag(self.groupeediteurTag)
+
+        #ecriture des infos du nouveau selectionne
+        self.groupeListPistes.previousPiste = self.groupeListPistes.ListPistes.currentItem()
         song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
         self.fill_groupeediteurTag_from_song_info(self.groupeediteurTag, song_info)
         self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
@@ -350,6 +389,10 @@ class MainWindow(QDialog):
                 self.groupeImageViewer.labelPictureInformation.setText(
                     "" + str(pixmap.height()) + "x" + str(pixmap.width()))
 
+    def clickMethodValider(self):
+        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
+        song_info.set_data_from_groupeediteurTag(self.groupeediteurTag)
+
     def createParcourir(self):
         self.groupeParcourir = QGroupBox("Parcourir")
 
@@ -370,6 +413,7 @@ class MainWindow(QDialog):
     def createListePistes(self):
         self.groupeListPistes = QGroupBox("Liste des Pistes")
         self.groupeListPistes.Pistes = []
+        self.groupeListPistes.previousPiste = None
         self.groupeListPistes.ListPistes = QListWidget(self)
         self.groupeListPistes.ListPistes.selectionModel().selectionChanged.connect(self.clickMethodListePiste)
         grid = QGridLayout()
@@ -454,8 +498,16 @@ class MainWindow(QDialog):
 
         self.groupeediteurTag.setLayout(grid)
 
+    def createValider(self):
+        self.groupeValider = QGroupBox("Valider")
+
+        boutonValider = QPushButton('Valdier', self)
+        boutonValider.clicked.connect(self.clickMethodValider)
 
         grid = QGridLayout()
+        grid.addWidget(boutonValider, 5, 4, 1, 1)
+
+        self.groupeValider.setLayout(grid)
 
 
     def __init__(self, parent=None):
@@ -467,15 +519,16 @@ class MainWindow(QDialog):
         self.createListePistes()
         self.createImageViewer()
         self.createEditeurTag()
+        self.createValider()
 
 
         main_layout = QGridLayout()
         main_layout.addWidget(self.groupeParcourir, 0, 0, 1, 2)
-        main_layout.addWidget(self.groupeListPistes, 1, 0, 5, 2)
+        main_layout.addWidget(self.groupeListPistes, 1, 0, 6, 2)
 
         main_layout.addWidget(self.groupeImageViewer, 0, 2, 3, 5)
         main_layout.addWidget(self.groupeediteurTag, 3, 2, 3, 5)
-
+        main_layout.addWidget(self.groupeValider, 6, 2, 1, 5)
 
         self.setLayout(main_layout)
 
