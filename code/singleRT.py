@@ -95,6 +95,8 @@ class MusiqueFile:
                 pixmap.loadFromData(tag.data)
                 coverInSongFile.set_pixmap(pixmap)
                 self.Images.append(coverInSongFile)
+                #pour qu'on selectionne de base cette image a la premiere ouverture
+                self.selectedIndices.append(len(self.Images)-1)
                 break
 
     def get_image_from_web(self):
@@ -105,7 +107,6 @@ class MusiqueFile:
         create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
         create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
 
-    # TODO doit etre porte par un nouvelle objet image viewer les deux proahcine
     def ImageViewer_save_selection(self, groupeImageViewer):
         self.selectedIndices = []
         for item in groupeImageViewer.ListImage.selectedIndexes():
