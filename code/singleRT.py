@@ -3,60 +3,22 @@ import sys
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QDateTime, Qt, QTimer, QSize
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateTimeEdit,
-        QDial, QDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-        QProgressBar, QPushButton, QRadioButton, QScrollBar, QSizePolicy, QListWidget,
-        QSlider, QSpinBox, QStyleFactory, QTableWidget, QTabWidget, QTextEdit,
-        QVBoxLayout, QWidget, QTableWidgetItem)
+                             QDial, QDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+                             QProgressBar, QPushButton, QRadioButton, QScrollBar, QSizePolicy, QListWidget,
+                             QSlider, QSpinBox, QStyleFactory, QTableWidget, QTabWidget, QTextEdit,
+                             QVBoxLayout, QWidget, QTableWidgetItem, QListWidgetItem)
 from PyQt5.QtGui import QPixmap
 
 import os
 import mutagen
+from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TPOS, TCON,TDRC, TXXX, APIC
 
 def extract_unitary(audio, string):
     try:
-        return audio[string][0]
+        return str(audio[string][0])
     except:
         return ''
-
-def extractMP3(musiqueInfo):
-    audio = ID3(musiqueInfo['old_file_name'])
-
-    musiqueInfo['Titre'] = extract_unitary(audio, 'TIT2')
-    musiqueInfo['Artiste'] = extract_unitary(audio, 'TPE1')
-    musiqueInfo['ArtisteDisplay'] = musiqueInfo['Artiste']
-    musiqueInfo['Artiste Album'] = extract_unitary(audio, 'TPE2')
-    musiqueInfo['Album'] = extract_unitary(audio, 'TALB')
-    musiqueInfo['Track'] = extract_unitary(audio, 'TRCK')
-    musiqueInfo['Disk'] = extract_unitary(audio, 'TPOS')
-    musiqueInfo['Genre'] = extract_unitary(audio, 'TCON')
-    musiqueInfo['Annee'] = extract_unitary(audio, 'TDRC')
-    # TODO faire les TXXX ??
-    musiqueInfo['Style'] = ''
-    musiqueInfo['ArtisteAll'] = ''
-    musiqueInfo['ArtisteRemix'] = ''
-    musiqueInfo['ArtisteFt'] = ''
-
-
-def extractFLAC(musiqueInfo):
-    from mutagen.flac import FLAC
-    audio = FLAC(musiqueInfo['old_file_name'])
-
-    musiqueInfo['Titre'] = extract_unitary(audio, 'title')
-
-    musiqueInfo['Artiste'] = extract_unitary(audio, 'artist')
-    musiqueInfo['ArtisteAll'] = extract_unitary(audio, 'artists (All)')
-    musiqueInfo['ArtisteRemix'] = extract_unitary(audio, 'Artist Remix')
-    musiqueInfo['ArtisteFt'] = extract_unitary(audio, 'artist ft')
-    musiqueInfo['ArtisteDisplay'] = musiqueInfo['Artiste']
-
-    musiqueInfo['Artiste Album'] = extract_unitary(audio, 'albumartist')
-    musiqueInfo['Album'] = extract_unitary(audio, 'Album')
-    musiqueInfo['Track'] = extract_unitary(audio, 'tracknumber')
-    musiqueInfo['Disk'] = extract_unitary(audio, 'discnumber')
-    musiqueInfo['Genre'] = extract_unitary(audio, 'genre')
-    musiqueInfo['Style'] = extract_unitary(audio, 'style')
-    musiqueInfo['Annee'] = extract_unitary(audio, 'date')
 
 class ImageInList:
     def __init__(self, nameInlist):
@@ -118,6 +80,7 @@ class MusiqueFile:
         self.Album = None
         self.ArtisteAlbum = None
         self.Images = []
+        self.selectedIndices = []
         noneImage = ImageInList("None")
         self.Images.append(noneImage)
 
@@ -142,7 +105,21 @@ class MusiqueFile:
         create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
         create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
 
-    def set_data_from_groupeediteurTag(self, groupeediteurTag):
+    # TODO doit etre porte par un nouvelle objet image viewer les deux proahcine
+    def ImageViewer_save_selection(self, groupeImageViewer):
+        self.selectedIndices = []
+        for item in groupeImageViewer.ListImage.selectedIndexes():
+            self.selectedIndices.append(item.row())
+
+    def ImageViewer_restore_selection(self, groupeImageViewer):
+        groupeImageViewer.ListImage.clearSelection()
+        for index in self.selectedIndices:
+            item = groupeImageViewer.ListImage.item(index)
+            item.setSelected(True)
+            # Mettre à jour explicitement currentItem
+            groupeImageViewer.ListImage.setCurrentItem(item)
+
+    def set_data_from_groupeediteurTag(self, groupeediteurTag, groupeImageViewer):
         self.Artiste = groupeediteurTag.zoneTextTitre.text()
         self.Titre = groupeediteurTag.zoneTextTitre.text()
         self.ArtisteDisplay = groupeediteurTag.zoneTextArtistAsDisplay.text()
@@ -156,7 +133,22 @@ class MusiqueFile:
         self.Track = groupeediteurTag.zoneTextNum.text()
         self.Album = groupeediteurTag.zoneTextAlbum.text()
         self.ArtisteAlbum = groupeediteurTag.zoneTextAlbumArtist.text()
-        #self.Images = []
+
+        self.ImageViewer_save_selection(groupeImageViewer)
+
+        #selectedImage = get_object_from_list(groupeImageViewer.ListImage.currentItem(), self.Images)
+        #if selectedImage is not None:
+        #    pixmap = selectedImage.get_pixmap()
+            #if pixmap is None:
+                #self.groupeImageViewer.photoViewer.fill_with_blank()
+                #self.groupeImageViewer.labelPictureInformation.setText("-")
+            #else:
+                #aspectRatioMode = Qt.KeepAspectRatio
+                #pixmap_resized = pixmap.scaled(300, 300, aspectRatioMode)
+                #self.groupeImageViewer.photoViewer.setPixmap(pixmap_resized)
+                #self.groupeImageViewer.labelPictureInformation.setText(
+                #    "" + str(pixmap.height()) + "x" + str(pixmap.width()))
+
 
 class FlacFile(MusiqueFile):
     def __init__(self, old_file_name, path):
@@ -186,6 +178,23 @@ class FlacFile(MusiqueFile):
         self.Style = extract_unitary(audio, 'style')
         self.Annee = extract_unitary(audio, 'date')
 
+    def saveTag(self):
+        from mutagen.flac import FLAC
+        audio = FLAC(self.old_file_name_with_path)
+        audio["title"] = self.Titre
+        audio["artist"] = self.ArtisteDisplay
+        audio["albumartist"] = self.ArtisteAlbum
+        audio["album artist"] = self.ArtisteAlbum
+        audio["artists (All)"] = self.ArtisteAll
+        audio["Artist Remix"] = self.ArtisteRemix
+        audio["artist ft"] = self.ArtisteFt
+        audio["album"] = self.Album
+        audio["tracknumber"] = self.Track
+        audio["discnumber"] = self.Disk
+        audio["genre"] = self.Genre
+        audio["style"] = self.Style
+        audio["date"] = self.Annee
+        audio.save()
 
 class Mp3File(MusiqueFile):
     def __init__(self, old_file_name, path):
@@ -207,11 +216,39 @@ class Mp3File(MusiqueFile):
         self.Disk = extract_unitary(audio, 'TPOS')
         self.Genre = extract_unitary(audio, 'TCON')
         self.Annee = extract_unitary(audio, 'TDRC')
-        # TODO faire les TXXX ??
-        # musiqueInfo['Style'] = ''
-        # musiqueInfo['ArtisteAll'] = ''
-        # musiqueInfo['ArtisteRemix'] = ''
-        # musiqueInfo['ArtisteFt'] = ''
+
+        # TXXX
+        self.Style = ''
+        self.ArtisteAll = ''
+        self.ArtisteRemix = ''
+        self.ArtisteFt = ''
+
+        audio = MP3(self.old_file_name_with_path, ID3=ID3)
+        for tag in audio.tags.getall('TXXX'):
+            if tag.desc == 'Style':
+                self.Style = tag.text[0]
+            if tag.desc == 'Artists (All)':
+                self.ArtisteAll = tag.text[0]
+            if tag.desc == 'Artist Remix':
+               self.ArtisteRemix = tag.text[0]
+            if tag.desc == 'Artist ft':
+                self.ArtisteFt = tag.text[0]
+
+    def saveTag(self):
+        audio = ID3(self.old_file_name_with_path)
+        audio.add(TIT2(encoding=3, text=self.Titre))
+        audio.add(TPE1(encoding=3, text=self.ArtisteDisplay))
+        audio.add(TPE2(encoding=3, text=self.ArtisteAlbum))
+        audio.add(TXXX(encoding=3, desc='Artists (All)', text=self.Artiste))
+        audio.add(TXXX(encoding=3, desc='Artist Remix', text=self.ArtisteRemix))
+        audio.add(TXXX(encoding=3, desc='Artist ft', text=self.ArtisteFt))
+        audio.add(TALB(encoding=3, text=self.Album))
+        audio.add(TRCK(encoding=3, text=self.Track))
+        audio.add(TPOS(encoding=3, text=self.Disk))
+        audio.add(TCON(encoding=3, text=self.Genre))
+        audio.add(TXXX(encoding=3, desc='Style', text=self.Style))
+        audio.add(TDRC(encoding=3, text=self.Annee))
+        audio.save()
 
 
 
@@ -332,12 +369,25 @@ class MainWindow(QDialog):
                     musique_file = FlacFile(files, path)
                 musique_file.extract_tag()
                 musique_file.extract_image()
-                musique_file.get_image_from_web()
                 self.groupeListPistes.Pistes.append(musique_file)
                 self.groupeListPistes.ListPistes.addItem(files)
 
+    def clickMethodSearchOneSongImage(self):
+        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
+        song_info.get_image_from_web()
+        self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
+
+    def clickMethodSearchAllImage(self):
+        for index in range(self.groupeListPistes.ListPistes.count()):
+            item = self.groupeListPistes.ListPistes.item(index)
+            song_info = get_object_from_list(item, self.groupeListPistes.Pistes)
+            song_info.get_image_from_web()
+
+        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
+        self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
 
     def fill_groupeediteurTag_from_song_info(self, groupeediteurTag, song_info):
+        groupeediteurTag.zoneTextFileName.setText(song_info.old_file_name)
         groupeediteurTag.zoneTextTitre.setText(song_info.Titre)
         groupeediteurTag.zoneTextArtistAsDisplay.setText(song_info.ArtisteDisplay)
         groupeediteurTag.zoneTextArtistFeaturing.setText(song_info.ArtisteFt)
@@ -357,15 +407,18 @@ class MainWindow(QDialog):
         for ImageToAppendInThelist in song_info.Images:
             nametoplot = ImageToAppendInThelist.get_name_in_list()
             groupeImageViewer.ListImage.addItem(nametoplot)
+        song_info.ImageViewer_restore_selection(groupeImageViewer)
 
     def clickMethodListePiste(self):
-        #Sauvegarde de ce qui a été rempli dans l'editeur de tag
+
         if self.groupeListPistes.previousPiste is not None:
+            # Sauvegarde de ce qui a été rempli dans l'editeur de tag
             song_info = get_object_from_list(self.groupeListPistes.previousPiste, self.groupeListPistes.Pistes)
-            song_info.set_data_from_groupeediteurTag(self.groupeediteurTag)
+            song_info.set_data_from_groupeediteurTag(self.groupeediteurTag, self.groupeImageViewer)
+
+        self.groupeListPistes.previousPiste = self.groupeListPistes.ListPistes.currentItem()
 
         #ecriture des infos du nouveau selectionne
-        self.groupeListPistes.previousPiste = self.groupeListPistes.ListPistes.currentItem()
         song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
         self.fill_groupeediteurTag_from_song_info(self.groupeediteurTag, song_info)
         self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
@@ -373,12 +426,12 @@ class MainWindow(QDialog):
 
     def clickMethodListeImage(self):
         song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
-        ImageToAppendInThelist = get_object_from_list(self.groupeImageViewer.ListImage.currentItem(), song_info.Images)
-        if ImageToAppendInThelist is None:
+        image_to_display = get_object_from_list(self.groupeImageViewer.ListImage.currentItem(), song_info.Images)
+        if image_to_display is None:
             self.groupeImageViewer.photoViewer.fill_with_blank()
             self.groupeImageViewer.labelPictureInformation.setText("-")
         else:
-            pixmap = ImageToAppendInThelist.get_pixmap()
+            pixmap = image_to_display.get_pixmap()
             if pixmap is None:
                 self.groupeImageViewer.photoViewer.fill_with_blank()
                 self.groupeImageViewer.labelPictureInformation.setText("-")
@@ -390,8 +443,16 @@ class MainWindow(QDialog):
                     "" + str(pixmap.height()) + "x" + str(pixmap.width()))
 
     def clickMethodValider(self):
-        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
-        song_info.set_data_from_groupeediteurTag(self.groupeediteurTag)
+        if self.groupeListPistes.ListPistes.currentItem() is not None:
+            song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
+            song_info.set_data_from_groupeediteurTag(self.groupeediteurTag, self.groupeImageViewer)
+        nb = self.groupeListPistes.ListPistes.count()
+        for index in range(self.groupeListPistes.ListPistes.count()):
+            item = self.groupeListPistes.ListPistes.item(index)
+            song_info = get_object_from_list(item, self.groupeListPistes.Pistes)
+            song_info.saveTag()
+        print("toto")
+
 
     def createParcourir(self):
         self.groupeParcourir = QGroupBox("Parcourir")
@@ -426,12 +487,18 @@ class MainWindow(QDialog):
         self.groupeImageViewer.Images = []
         self.groupeImageViewer.ListImage = QListWidget(self)
         self.groupeImageViewer.ListImage.selectionModel().selectionChanged.connect(self.clickMethodListeImage)
+        self.groupeImageViewer.selectedIndices = []
+        boutonValider = QPushButton('Image du web', self)
+        boutonValider.clicked.connect(self.clickMethodSearchOneSongImage)
+        boutonValider2 = QPushButton('toutes les musiques', self)
+        boutonValider2.clicked.connect(self.clickMethodSearchAllImage)
         self.groupeImageViewer.photoViewer = ImageLabel()
         self.groupeImageViewer.labelPictureInformation = QLabel("-")
         self.groupeImageViewer.labelPictureInformation.setAlignment(Qt.AlignCenter)
-
         gridImageViewer = QGridLayout()
-        gridImageViewer.addWidget(self.groupeImageViewer.ListImage, 0, 0, 11, 2)
+        gridImageViewer.addWidget(self.groupeImageViewer.ListImage, 0, 0, 10, 2)
+        gridImageViewer.addWidget(boutonValider, 10, 0, 1, 1)
+        gridImageViewer.addWidget(boutonValider2, 10, 1, 1, 1)
         gridImageViewer.addWidget(self.groupeImageViewer.photoViewer, 0, 2, 10, 3)
         gridImageViewer.addWidget(self.groupeImageViewer.labelPictureInformation, 10, 2, 1, 3)
         self.groupeImageViewer.setLayout(gridImageViewer)
@@ -439,6 +506,8 @@ class MainWindow(QDialog):
     def createEditeurTag(self):
         self.groupeediteurTag = QGroupBox("Editeur ID3tag")
 
+        labelFileName= QLabel("FileName")
+        self.groupeediteurTag.zoneTextFileName = QLineEdit(self)
         labelTitre = QLabel("Titre")
         self.groupeediteurTag.zoneTextTitre = QLineEdit(self)
         labelArtistAsDisplay = QLabel("Artist As Display")
@@ -467,41 +536,49 @@ class MainWindow(QDialog):
         self.groupeediteurTag.zoneTextNum = QLineEdit(self)
 
         grid = QGridLayout()
-        grid.addWidget(labelTitre, 1, 0, 1, 2)
-        grid.addWidget(self.groupeediteurTag.zoneTextTitre, 1, 2, 1, 9)
-
-        grid.addWidget(labelArtistAsDisplay, 2, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextArtistAsDisplay, 2, 2, 1, 9)
-        grid.addWidget(labelArtistFeaturing, 3, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextArtistFeaturing, 3, 2, 1, 9)
-        grid.addWidget(labelArtistRemix, 4, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextArtistRemix, 4, 2, 1, 9)
-        grid.addWidget(labelArtistAll, 5, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextArtistAll, 5, 2, 1, 9)
-        grid.addWidget(labelAlbumArtist, 6, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextAlbumArtist, 6, 2, 1, 9)
-
-        grid.addWidget(labelGenre, 8, 0, 1, 2)
-        grid.addWidget(self.groupeediteurTag.zoneTextGenre, 8, 1, 1, 3)
-        grid.addWidget(labelStyle, 8, 4)
-        grid.addWidget(self.groupeediteurTag.zoneTextStyle, 8, 5, 1, 5)
-
-        grid.addWidget(labelAlbum, 7, 0, 1, 2)
-        grid.addWidget(self.groupeediteurTag.zoneTextAlbum, 7, 1, 1, 3)
-
-        grid.addWidget(labelAnnee, 9, 0)
-        grid.addWidget(self.groupeediteurTag.zoneTextAnnee, 9, 1)
-        grid.addWidget(labelDisc, 9, 2)
-        grid.addWidget(self.groupeediteurTag.zoneTextDisc, 9, 3)
-        grid.addWidget(labelNum, 9, 4)
-        grid.addWidget(self.groupeediteurTag.zoneTextNum, 9, 5)
+        line = 1
+        grid.addWidget(labelFileName, line, 0, 1, 2)
+        grid.addWidget(self.groupeediteurTag.zoneTextFileName, line, 2, 1, 9)
+        line = line+1
+        grid.addWidget(labelTitre, line, 0, 1, 2)
+        grid.addWidget(self.groupeediteurTag.zoneTextTitre, line, 2, 1, 9)
+        line = line+1
+        grid.addWidget(labelArtistAsDisplay, line, 0, 1, 3)
+        grid.addWidget(self.groupeediteurTag.zoneTextArtistAsDisplay, line, 2, 1, 9)
+        line = line+1
+        grid.addWidget(labelArtistFeaturing, line, 0, 1, 3)
+        grid.addWidget(self.groupeediteurTag.zoneTextArtistFeaturing, line, 2, 1, 9)
+        line = line+1
+        grid.addWidget(labelArtistRemix, line, 0, 1, 3)
+        grid.addWidget(self.groupeediteurTag.zoneTextArtistRemix, line, 2, 1, 9)
+        line = line+1
+        grid.addWidget(labelArtistAll, line, 0, 1, 3)
+        grid.addWidget(self.groupeediteurTag.zoneTextArtistAll, line, 2, 1, 9)
+        line = line+1
+        grid.addWidget(labelAlbumArtist, line, 0, 1, 3)
+        grid.addWidget(self.groupeediteurTag.zoneTextAlbumArtist, line, 2, 1, 9)
+        line = line + 1
+        grid.addWidget(labelAlbum, line, 0, 1, 2)
+        grid.addWidget(self.groupeediteurTag.zoneTextAlbum, line, 1, 1, 3)
+        line = line + 1
+        grid.addWidget(labelGenre, line, 0, 1, 2)
+        grid.addWidget(self.groupeediteurTag.zoneTextGenre, line, 1, 1, 3)
+        grid.addWidget(labelStyle, line, 4)
+        grid.addWidget(self.groupeediteurTag.zoneTextStyle, line, 5, 1, 5)
+        line = line + 1
+        grid.addWidget(labelAnnee, line, 0)
+        grid.addWidget(self.groupeediteurTag.zoneTextAnnee, line, 1)
+        grid.addWidget(labelDisc, line, 2)
+        grid.addWidget(self.groupeediteurTag.zoneTextDisc, line, 3)
+        grid.addWidget(labelNum, line, 4)
+        grid.addWidget(self.groupeediteurTag.zoneTextNum, line, 5)
 
         self.groupeediteurTag.setLayout(grid)
 
     def createValider(self):
         self.groupeValider = QGroupBox("Valider")
 
-        boutonValider = QPushButton('Valdier', self)
+        boutonValider = QPushButton('Valider', self)
         boutonValider.clicked.connect(self.clickMethodValider)
 
         grid = QGridLayout()
