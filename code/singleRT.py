@@ -6,13 +6,25 @@ from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateTimeEdit,
                              QDial, QDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
                              QProgressBar, QPushButton, QRadioButton, QScrollBar, QSizePolicy, QListWidget,
                              QSlider, QSpinBox, QStyleFactory, QTableWidget, QTabWidget, QTextEdit,
-                             QVBoxLayout, QWidget, QTableWidgetItem, QListWidgetItem)
+                             QVBoxLayout, QWidget, QTableWidgetItem, QListWidgetItem, QCompleter)
 from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import QBuffer
 
 import os
 import mutagen
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TPOS, TCON,TDRC, TXXX, APIC
+
+#Discogs genre
+DISCOGS_GENRE = ["", "Blues", "Brass & Military", "Children’s", "Classical", "Electronic", "Folk, World, & Country", "Funk / Soul", "Hip Hop", "Jazz", "Latin", "Non-Music", "Pop", "Reggae", "Rock", "Stage & Screen"]
+
+
+def convert_qpixmap_to_bytes(qpixmap, image_format='JPEG'):
+    # Convertir le QPixmap en bytes en utilisant QBuffer
+    buffer = QBuffer()
+    buffer.open(QBuffer.ReadWrite)
+    qpixmap.save(buffer, image_format)
+    return buffer.data().data()
 
 def extract_unitary(audio, string):
     try:
@@ -180,7 +192,7 @@ class FlacFile(MusiqueFile):
         self.Annee = extract_unitary(audio, 'date')
 
     def saveTag(self):
-        from mutagen.flac import FLAC
+        from mutagen.flac import FLAC, Picture
         audio = FLAC(self.old_file_name_with_path)
         audio["title"] = self.Titre
         audio["artist"] = self.ArtisteDisplay
@@ -195,6 +207,17 @@ class FlacFile(MusiqueFile):
         audio["genre"] = self.Genre
         audio["style"] = self.Style
         audio["date"] = self.Annee
+
+        # Créer un objet Picture
+        #picture = Picture()
+        #picture.data = image_data
+        #picture.type = image_type  # 3 correspond à "Cover (front)"
+        #picture.mime = "image/jpeg"  # Ou "image/png" selon le type d'image
+        #picture.desc = "Cover"
+
+        # Ajouter l'image aux blocs de métadonnées du fichier FLAC
+        #audio.add_picture(picture)
+
         audio.save()
 
 class Mp3File(MusiqueFile):
@@ -249,6 +272,30 @@ class Mp3File(MusiqueFile):
         audio.add(TCON(encoding=3, text=self.Genre))
         audio.add(TXXX(encoding=3, desc='Style', text=self.Style))
         audio.add(TDRC(encoding=3, text=self.Annee))
+
+        # Enleve les images existantes
+        apic_tags = [tag for tag in audio.keys() if tag.startswith('APIC')]
+        for tag in apic_tags:
+            audio.delall(tag)
+
+        # Créer un objet APIC pour l'image
+        if self.selectedIndices:
+            image_to_display = self.Images[self.selectedIndices[0]]
+
+            if image_to_display is not None:
+                if image_to_display.pixmap is not None:
+                    image_mime = 'image/jpeg'
+                    image_data = convert_qpixmap_to_bytes(image_to_display.pixmap, image_format=image_mime.split('/')[1].upper())
+                    apic = APIC(
+                        encoding=3,  # 3 = UTF-8
+                        mime=image_mime,  # 'image/jpeg' ou 'image/png'
+                        type=3,  # 3 = Cover (front)
+                        desc=u'Cover',
+                        data=image_data
+                    )
+
+                    audio.add(apic)
+
         audio.save()
 
 
@@ -447,12 +494,10 @@ class MainWindow(QDialog):
         if self.groupeListPistes.ListPistes.currentItem() is not None:
             song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
             song_info.set_data_from_groupeediteurTag(self.groupeediteurTag, self.groupeImageViewer)
-        nb = self.groupeListPistes.ListPistes.count()
         for index in range(self.groupeListPistes.ListPistes.count()):
             item = self.groupeListPistes.ListPistes.item(index)
             song_info = get_object_from_list(item, self.groupeListPistes.Pistes)
             song_info.saveTag()
-        print("toto")
 
 
     def createParcourir(self):
@@ -524,6 +569,10 @@ class MainWindow(QDialog):
 
         labelGenre = QLabel("Genre")
         self.groupeediteurTag.zoneTextGenre = QLineEdit(self)
+        # Création du QCompleter avec la liste de mots
+        completer = QCompleter(DISCOGS_GENRE)
+        self.groupeediteurTag.zoneTextGenre.setCompleter(completer)
+
         labelStyle = QLabel("Style")
         self.groupeediteurTag.zoneTextStyle = QLineEdit(self)
         labelAnnee = QLabel("Annee")
