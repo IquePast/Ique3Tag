@@ -15,6 +15,8 @@ import mutagen
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TPOS, TCON,TDRC, TXXX, APIC
 
+import re
+
 #Discogs genre
 DISCOGS_GENRE = ["", "Blues", "Brass & Military", "Children’s", "Classical", "Electronic", "Folk, World, & Country", "Funk / Soul", "Hip Hop", "Jazz", "Latin", "Non-Music", "Pop", "Reggae", "Rock", "Stage & Screen"]
 
@@ -263,7 +265,7 @@ class Mp3File(MusiqueFile):
         audio.add(TIT2(encoding=3, text=self.Titre))
         audio.add(TPE1(encoding=3, text=self.ArtisteDisplay))
         audio.add(TPE2(encoding=3, text=self.ArtisteAlbum))
-        audio.add(TXXX(encoding=3, desc='Artists (All)', text=self.Artiste))
+        audio.add(TXXX(encoding=3, desc='Artists (All)', text=self.ArtisteAll))
         audio.add(TXXX(encoding=3, desc='Artist Remix', text=self.ArtisteRemix))
         audio.add(TXXX(encoding=3, desc='Artist ft', text=self.ArtisteFt))
         audio.add(TALB(encoding=3, text=self.Album))
@@ -499,6 +501,70 @@ class MainWindow(QDialog):
             song_info = get_object_from_list(item, self.groupeListPistes.Pistes)
             song_info.saveTag()
 
+    def clickMethodAutoAnalyse(self):
+        # Expression régulière pour trouver et enlever "myfreemp3.xxx" si ce n'est pas à la fin de la chaîne
+        chaine = self.groupeediteurTag.zoneTextFileName.text()
+        #traitement myfreemp3
+        chaine = re.sub(r'\s*myfreemp3\.\w+\s*(?=\.\w+$)', '', chaine)
+        # Enlever l'extension
+        chaine = chaine.replace(".mp3", "").replace(".flac", "")
+        # Enlever l'extension
+        chaine = chaine.replace("feat.", "ft.").replace("Feat.", "ft.").replace("Ft.", "ft.").replace("Featuring", "ft.").replace("featuring", "ft.")
+        # Assigner les parties aux variables artiste et titre
+        parts = chaine.split(" - ", 1)
+        if len(parts) == 2:
+            artiste = parts[0].strip()  # Supprime les espaces avant/après
+            titre = parts[1].strip()
+        else:
+            artiste = ""
+            titre = chaine.strip()
+
+        self.groupeediteurTag.zoneTextTitre.setText(titre)
+        self.groupeediteurTag.zoneTextArtistAsDisplay.setText(artiste)
+
+        parts = re.split(r'\s*feat.\s*|\s*ft.\s*|\s*Ft.\s*', artiste)
+        if len(parts) == 2:
+            artisteAll = parts[0].strip()  # Supprime les espaces avant/après
+            artisteFeat = parts[1].strip()
+        else:
+            artisteAll = artiste.strip()
+            artisteFeat = ""
+
+        parts = re.split(r'\s*,\s*|\s*&\s*', artisteFeat)
+        artistes_feat_nettoyes = [artiste.strip() for artiste in parts]
+        # Enlever les doublons tout en conservant l'ordre avec un set
+        vue = set()
+        artistes_feat_nettoyes_sans_doublons = [x for x in artistes_feat_nettoyes if not (x in vue or vue.add(x))]
+
+        artisteFeat = ";".join(artistes_feat_nettoyes_sans_doublons)
+
+        parts = re.split(r'\s*,\s*|\s*&\s*', artisteAll)
+        artistes_all_nettoyes = [artiste.strip() for artiste in parts]
+
+        if artistes_feat_nettoyes[0] != "":
+            artistes_all_nettoyes.extend(artistes_feat_nettoyes)
+        # Enlever les doublons tout en conservant l'ordre avec un set
+        vue = set()
+        artistes_all_nettoyes_sans_doublons = [x for x in artistes_all_nettoyes if not (x in vue or vue.add(x))]
+
+        artisteAll = ";".join(artistes_all_nettoyes_sans_doublons)
+
+
+        self.groupeediteurTag.zoneTextArtistFeaturing.setText(artisteFeat)
+        self.groupeediteurTag.zoneTextArtistAll.setText(artisteAll)
+
+        #parts = chaine.split(" & ", 1)
+        #self.Titre = groupeediteurTag.zoneTextTitre.text()
+        #self.ArtisteRemix = groupeediteurTag.zoneTextArtistRemix.text()
+
+        #self.Annee = groupeediteurTag.zoneTextAnnee.text()
+        #self.Style = groupeediteurTag.zoneTextStyle.text()
+        #self.Genre = groupeediteurTag.zoneTextGenre.text()
+        #self.Disk = groupeediteurTag.zoneTextDisc.text()
+        #self.Track = groupeediteurTag.zoneTextNum.text()
+        #self.Album = groupeediteurTag.zoneTextAlbum.text()
+        #self.ArtisteAlbum = groupeediteurTag.zoneTextAlbumArtist.text()
+
 
     def createParcourir(self):
         self.groupeParcourir = QGroupBox("Parcourir")
@@ -622,6 +688,10 @@ class MainWindow(QDialog):
         grid.addWidget(self.groupeediteurTag.zoneTextDisc, line, 3)
         grid.addWidget(labelNum, line, 4)
         grid.addWidget(self.groupeediteurTag.zoneTextNum, line, 5)
+        line = line + 1
+        bouton_AutoAnalyse = QPushButton('Auto-analyse', self)
+        bouton_AutoAnalyse.clicked.connect(self.clickMethodAutoAnalyse)
+        grid.addWidget(bouton_AutoAnalyse, line, 0)
 
         self.groupeediteurTag.setLayout(grid)
 
