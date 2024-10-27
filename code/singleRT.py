@@ -121,6 +121,10 @@ class MusiqueFile:
         create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
         create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
 
+    def get_image_from_url(self, url):
+        create_ImageInList_from_Url(self.Images, url)
+
+
     def ImageViewer_save_selection(self, groupeImageViewer):
         self.selectedIndices = []
         for item in groupeImageViewer.ListImage.selectedIndexes():
@@ -302,7 +306,7 @@ class Mp3File(MusiqueFile):
 
 
 
-def download_and_handle_image(url, i, images_list):
+def download_and_handle_image(url, images_list):
     from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
     from PyQt5.QtCore import QUrl, QEventLoop
     network_manager = QNetworkAccessManager()
@@ -382,11 +386,16 @@ def create_ImageInList_from_web(Images, query, number_of_image):
     i = 0
     for url in urls:
         try:
-            download_and_handle_image(url, i, Images)
+            download_and_handle_image(url, Images)
             i = i + 1
         except:
             pass
 
+def create_ImageInList_from_Url(Images, url):
+    try:
+        download_and_handle_image(url, Images)
+    except:
+        pass
 
 
 def get_object_from_list(item, object_list):
@@ -434,6 +443,13 @@ class MainWindow(QDialog):
             song_info.get_image_from_web()
 
         song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
+        self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
+
+    def clickMethodAddOneSongImageFromUrl(self):
+        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(),
+                                         self.groupeListPistes.Pistes)
+        url = self.groupeImageViewer.zoneTextUrlAjoutManuel.text()
+        song_info.get_image_from_url(url)
         self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
 
     def fill_groupeediteurTag_from_song_info(self, groupeediteurTag, song_info):
@@ -600,19 +616,31 @@ class MainWindow(QDialog):
         self.groupeImageViewer.ListImage = QListWidget(self)
         self.groupeImageViewer.ListImage.selectionModel().selectionChanged.connect(self.clickMethodListeImage)
         self.groupeImageViewer.selectedIndices = []
-        boutonValider = QPushButton('Image du web', self)
+        boutonValider = QPushButton('Rech. Auto', self)
         boutonValider.clicked.connect(self.clickMethodSearchOneSongImage)
-        boutonValider2 = QPushButton('toutes les musiques', self)
+        boutonValider2 = QPushButton('Rech. Auto. tt Musique', self)
         boutonValider2.clicked.connect(self.clickMethodSearchAllImage)
+        boutonValider3 = QPushButton('Ajout Via Url', self)
+        boutonValider3.clicked.connect(self.clickMethodAddOneSongImageFromUrl)
         self.groupeImageViewer.photoViewer = ImageLabel()
         self.groupeImageViewer.labelPictureInformation = QLabel("-")
         self.groupeImageViewer.labelPictureInformation.setAlignment(Qt.AlignCenter)
         gridImageViewer = QGridLayout()
-        gridImageViewer.addWidget(self.groupeImageViewer.ListImage, 0, 0, 10, 2)
-        gridImageViewer.addWidget(boutonValider, 10, 0, 1, 1)
-        gridImageViewer.addWidget(boutonValider2, 10, 1, 1, 1)
+        gridImageViewer.addWidget(self.groupeImageViewer.ListImage, 0, 0, 9, 2)
+        gridImageViewer.addWidget(boutonValider, 9, 0, 1, 1)
+        gridImageViewer.addWidget(boutonValider2, 9, 1, 1, 1)
+        self.groupeImageViewer.zoneTextUrlAjoutManuel = QLineEdit(self)
+        gridImageViewer.addWidget(self.groupeImageViewer.zoneTextUrlAjoutManuel, 10, 0, 1, 1)
+        gridImageViewer.addWidget(boutonValider3, 10, 1, 1, 1)
+
         gridImageViewer.addWidget(self.groupeImageViewer.photoViewer, 0, 2, 10, 3)
         gridImageViewer.addWidget(self.groupeImageViewer.labelPictureInformation, 10, 2, 1, 3)
+
+        # Utiliser des stretch factors pour équilibrer l'espace entre les colonnes
+        gridImageViewer.setColumnStretch(0, 1)
+        gridImageViewer.setColumnStretch(1, 1)
+        gridImageViewer.setColumnStretch(2, 2)  # Donne plus d'espace à la colonne 2
+
         self.groupeImageViewer.setLayout(gridImageViewer)
 
     def createEditeurTag(self):
