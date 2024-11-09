@@ -1,12 +1,12 @@
 import sys
 
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import QDateTime, Qt, QTimer, QSize
+from PyQt5.QtCore import QDateTime, Qt, QTimer, QSize, QItemSelectionModel
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateTimeEdit,
                              QDial, QDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
                              QProgressBar, QPushButton, QRadioButton, QScrollBar, QSizePolicy, QListWidget,
-                             QSlider, QSpinBox, QStyleFactory, QTableWidget, QTabWidget, QTextEdit,
-                             QVBoxLayout, QWidget, QTableWidgetItem, QListWidgetItem, QCompleter)
+                             QSlider, QSpinBox, QStyleFactory, QTableWidget, QTextEdit,
+                             QVBoxLayout, QWidget, QTableWidgetItem, QAbstractItemView, QCompleter)
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import QBuffer
 
@@ -16,10 +16,19 @@ from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TPOS, TCON,TDRC, TXXX, APIC
 
 import re
+import discogs_client
+
+
+from dotenv import load_dotenv
 
 #Discogs genre
 DISCOGS_GENRE = ["", "Blues", "Brass & Military", "Children’s", "Classical", "Electronic", "Folk, World, & Country", "Funk / Soul", "Hip Hop", "Jazz", "Latin", "Non-Music", "Pop", "Reggae", "Rock", "Stage & Screen"]
 
+# Charger les variables d'environnement à partir du fichier .env
+load_dotenv()
+
+# Récupérer le token depuis l'environnement
+my_discogs_user_token = os.getenv("DISCOGS_USER_TOKEN")
 
 def convert_qpixmap_to_bytes(qpixmap, image_format='JPEG'):
     # Convertir le QPixmap en bytes en utilisant QBuffer
@@ -33,6 +42,91 @@ def extract_unitary(audio, string):
         return str(audio[string][0])
     except:
         return ''
+
+def search_track_in_tracklist(song, discogs_tracks):
+    import difflib
+    # Trouver la meilleure correspondance
+    tracks = []
+
+    search_song = song
+
+    # Construire la liste des titres formatés avec artistes
+    for discogs_track in discogs_tracks:
+        track = ""
+        # On verifie que ce n'est pas un separateur (titre de cd par exemple)
+        if discogs_track.data['type_'] != 'index':
+            try:
+                for artist in discogs_track.data['artists']:
+                    track = track + artist['name']
+                    track = track + " "
+                track = track + "- "
+            except KeyError:
+                search_song = song.split("-", 1)[1].strip()
+
+            track = track + discogs_track.title
+
+        tracks.append(track)
+
+    matches = difflib.get_close_matches(search_song, tracks, n=1,
+                                        cutoff=0.6)  # n=1 pour obtenir la meilleure correspondance
+
+    # Retourner l'objet `discogs_track` correspondant à la meilleure correspondance
+    if matches:
+        best_match = matches[0]
+        match_index = tracks.index(best_match)  # Trouver l'index de la correspondance
+        return discogs_tracks[match_index]  # Retourner l'objet `discogs_track` correspondant
+
+
+    # Si aucune correspondance n'est trouvée
+    return None
+
+
+
+#Pour le tableau de choix discogs
+#class MyTableWidget(QTableWidget):
+#    def __init__(self, parent=None):
+#        super().__init__(parent)
+
+#    def keyPressEvent(self, event):
+#        if event.key() == Qt.Key_Delete:
+#            selected_items = self.selectedItems()
+#            for item in selected_items:
+#                item.setText("")
+#        else:
+#            super().keyPressEvent(event)
+
+#ICI
+class MyTableWidget(QTableWidget):
+    def __init__(self, rows, columns, parent=None):
+        super().__init__(rows, columns, parent)
+        self.selected_cells = {}  # Stocke la cellule sélectionnée pour chaque colonne
+
+        # Permettre la sélection multiple
+        self.setSelectionMode(QAbstractItemView.MultiSelection)
+
+        # Connecter l'événement de clic sur les cellules
+        self.cellClicked.connect(self.handle_cell_click)
+
+    def handle_cell_click(self, row, column):
+        # Accéder au modèle de sélection
+        selection_model = self.selectionModel()
+
+        # Si la cellule est déjà sélectionnée, la désélectionner
+        if (row, column) == self.selected_cells.get(column):
+            index = self.model().index(row, column)
+            selection_model.select(index, QItemSelectionModel.Deselect)
+            del self.selected_cells[column]
+        else:
+            # Désélectionner la cellule précédemment sélectionnée dans cette colonne, le cas échéant
+            if column in self.selected_cells:
+                previous_row = self.selected_cells[column][0]
+                previous_index = self.model().index(previous_row, column)
+                selection_model.select(previous_index, QItemSelectionModel.Deselect)
+
+            # Sélectionner la nouvelle cellule
+            index = self.model().index(row, column)
+            selection_model.select(index, QItemSelectionModel.Select)
+            self.selected_cells[column] = (row, column)
 
 class ImageInList:
     def __init__(self, nameInlist):
@@ -410,6 +504,218 @@ def set_Musique(item, object_list):
             if item.text() == Objects.get_name_in_list():
                 return Objects
 
+class DiscogsListWindow(QWidget):
+    # Constantes pour les colonnes
+    COL_DISCOGS_TITRE = 0
+    COL_DISCOGS_ARTISTE_AS_DISPLAY = 1
+    COL_DISCOGS_ARTISTE_FEAT = 2
+    COL_DISCOGS_ARTISTE_REMIX = 3
+    COL_DISCOGS_ARTISTE_ALL = 4
+    COL_DISCOGS_GENRE = 5
+    COL_DISCOGS_STYLE = 6
+    COL_DISCOGS_ANNEE = 7
+    COL_DISCOGS_ALBUM = 8
+    COL_DISCOGS_ALBUM_ARTIST = 9
+
+    def setListDiscogsTableur(self, ligne, colonne, textAecrire):
+        item = QTableWidgetItem()
+        self.ListDiscogs.tableWidget.setItem(ligne, colonne, item)
+        item.setText(textAecrire)
+
+    def fill_discogs_table_from_internet_query(self):
+        searched_song = self.main_window.groupeediteurTag.zoneTextArtistAsDisplay.text() + " - " + self.main_window.groupeediteurTag.zoneTextTitre.text()
+        d = discogs_client.Client('ExampleApplication/0.1', user_token=my_discogs_user_token)
+        releases = d.search(searched_song, type='release')
+
+        self.ListDiscogs.tableWidget.clearContents()
+        i = 0
+
+        for intermediate_release in releases:
+
+            d = discogs_client.Client('ExampleApplication/0.1', user_token=my_discogs_user_token)
+            release = d.release(intermediate_release.id)
+
+            try:
+                track = search_track_in_tracklist(searched_song, release.tracklist)
+
+                if track is None:
+                    continue
+
+                # Title
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_TITRE, track.title)
+
+                # Gestion de artiste
+
+                # Savoir le type d'extraction
+                songArt = []
+                songRmx = []
+                songFt = []
+                songAll = []
+
+                # main artist
+
+                mainartist = ''
+                try:
+                    for artist in track.data['artists']:
+                        mainartist = mainartist + artist['name']
+                        if (artist['join'] != ''): mainartist = mainartist + ' ' + artist['join'] + ' '
+                        if (artist['name'] in songAll) == False: songAll.append(artist['name'])
+                except KeyError:
+                    for artist in release.data['artists']:
+                        mainartist = mainartist + artist['name']
+                        if (artist['join'] != ''): mainartist = mainartist + ' ' + artist['join'] + ' '
+                        if (artist['name'] in songAll) == False: songAll.append(artist['name'])
+
+                if mainartist == '':
+                    mainartist = release.artists[0].name
+                if not (songAll):
+                    songAll.append(release.artists[0].name)
+
+                # Credits - aditional artists
+                try:
+                    for artist in track.data['extraartists']:
+                        if artist['role'] == 'Featuring' and (artist['name'] in songFt) == False:
+                            songFt.append(artist['name'])
+                        elif artist['role'] == 'Remix' and (artist['name'] in songRmx) == False:
+                            songRmx.append(artist['name'])
+
+                        if (artist['name'] in songAll) == False: songAll.append(artist['name'])
+                except:
+                    pass
+
+                # main
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_ARTISTE_AS_DISPLAY, mainartist)
+
+                # Featuring
+                participant = ''
+                numParticipant = 0
+                for artists in songFt:
+                    if numParticipant > 0: participant = participant + ';'
+                    participant = participant + artists
+                    numParticipant = numParticipant + 1
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_ARTISTE_FEAT, participant)
+
+                # Remix
+                participant = ''
+                numParticipant = 0
+                for artists in songRmx:
+                    if numParticipant > 0: participant = participant + ';'
+                    participant = participant + artists
+                    numParticipant = numParticipant + 1
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_ARTISTE_REMIX, participant)
+
+                # All credit
+                participant = ''
+                numParticipant = 0
+                for artists in songAll:
+                    if numParticipant > 0: participant = participant + ';'
+                    participant = participant + artists
+                    numParticipant = numParticipant + 1
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_ARTISTE_ALL, participant)
+
+                # Album
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_ALBUM, release.title)
+                # Album Artiste
+                if release.artists[0].name == 'Various':
+                    self.setListDiscogsTableur(i, self.COL_DISCOGS_ALBUM_ARTIST, 'Various Artists')
+                else:
+                    self.setListDiscogsTableur(i, self.COL_DISCOGS_ALBUM_ARTIST, release.artists[0].name)
+
+                # Genre
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_GENRE, release.genres[0])
+                # Style
+                listdesStyles = ''
+                numStyle = 0
+                try:
+                    for styleZik in release.styles:
+                        if numStyle > 0: listdesStyles = listdesStyles + ';'
+                        listdesStyles = listdesStyles + styleZik
+                        numStyle = numStyle + 1
+                except:
+                    listdesStyles = ''
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_STYLE, listdesStyles)
+
+                # Date
+                self.setListDiscogsTableur(i, self.COL_DISCOGS_ANNEE, str(release.year))
+
+                i = i + 1
+                if i == 10:
+                    break
+            except:
+                pass
+
+    def write_to_main_window(self):
+        # Dictionnaire associant les colonnes aux champs de groupeediteurTag
+        column_to_field = {
+            self.COL_DISCOGS_TITRE: self.main_window.groupeediteurTag.zoneTextTitre,
+            self.COL_DISCOGS_ARTISTE_AS_DISPLAY: self.main_window.groupeediteurTag.zoneTextArtistAsDisplay,
+            self.COL_DISCOGS_ARTISTE_FEAT: self.main_window.groupeediteurTag.zoneTextArtistFeaturing,
+            self.COL_DISCOGS_ARTISTE_REMIX: self.main_window.groupeediteurTag.zoneTextArtistRemix,
+            self.COL_DISCOGS_ARTISTE_ALL: self.main_window.groupeediteurTag.zoneTextArtistAll,
+            self.COL_DISCOGS_GENRE: self.main_window.groupeediteurTag.zoneTextGenre,
+            self.COL_DISCOGS_STYLE: self.main_window.groupeediteurTag.zoneTextStyle,
+            self.COL_DISCOGS_ANNEE: self.main_window.groupeediteurTag.zoneTextAnnee,
+            self.COL_DISCOGS_ALBUM: self.main_window.groupeediteurTag.zoneTextAlbum,
+            self.COL_DISCOGS_ALBUM_ARTIST: self.main_window.groupeediteurTag.zoneTextAlbumArtist,
+        }
+
+        # Boucle sur chaque colonne et champ associé
+        for column, field in column_to_field.items():
+            # Vérifier si une cellule est sélectionnée dans cette colonne
+            selected_cell = self.ListDiscogs.tableWidget.selected_cells.get(column)
+            if selected_cell:
+                row, _ = selected_cell
+                # Obtenir l'objet QTableWidgetItem
+                item = self.ListDiscogs.tableWidget.item(row, column)
+                if item is not None:
+                    # Obtenir le texte de la cellule et l'écrire dans le champ correspondant
+                    cell_value = item.text()
+                    field.setText(cell_value)
+
+    def __init__(self, main_window):
+        super().__init__()
+
+        def createTableurDiscogs(self):
+            self.ListDiscogs = QWidget()
+            self.ListDiscogs.tableWidget = MyTableWidget(100, 10)
+            self.ListDiscogs.tableWidget.setRowCount(100)
+            self.ListDiscogs.tableWidget.setColumnCount(10)
+            self.ListDiscogs.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            self.ListDiscogs.tableWidget.setHorizontalHeaderLabels(
+                ['Titre', 'Artiste As Display', 'Artiste Featuring', 'Artiste Remix', 'Artiste All', 'Genre', 'Style', 'Annee', 'Album', 'Artist Album'])
+
+            tab1hbox = QHBoxLayout()
+            tab1hbox.setContentsMargins(5, 5, 5, 5)
+            tab1hbox.addWidget(self.ListDiscogs.tableWidget)
+            #
+            item = QTableWidgetItem()
+            self.ListDiscogs.tableWidget.setItem(0, 1, item)
+            self.ListDiscogs.setLayout(tab1hbox)
+
+        # Référence à la fenêtre principale
+        self.main_window = main_window
+
+        # Configuration de la nouvelle fenêtre
+        self.setWindowTitle("Remplissage via Discogs")
+        self.setMinimumSize(1000, 300)
+
+        # Creation Bouton search
+        discogs_search = QPushButton("Recherche", self)
+        discogs_search.clicked.connect(self.fill_discogs_table_from_internet_query)
+
+        #Creation du tableaur discogs
+        createTableurDiscogs(self)
+
+        # Creation Bouton Hello World
+        discogs_valider = QPushButton("Hello World", self)
+        discogs_valider.clicked.connect(self.write_to_main_window)  # Connecter le bouton à la méthode d'écriture
+
+        # Layout pour le bouton dans la nouvelle fenêtre
+        grid = QGridLayout()
+        grid.addWidget(discogs_search, 0, 0)
+        grid.addWidget(self.ListDiscogs, 1, 0, 5, 10)
+        grid.addWidget(discogs_valider, 6, 0)
+        self.setLayout(grid)
 
 class MainWindow(QDialog):
     def clickMethodOpenBrowser(self):
@@ -581,6 +887,10 @@ class MainWindow(QDialog):
         #self.Album = groupeediteurTag.zoneTextAlbum.text()
         #self.ArtisteAlbum = groupeediteurTag.zoneTextAlbumArtist.text()
 
+    def open_new_window(self):
+        # Créer et afficher la nouvelle fenêtre
+        self.discogs_window = DiscogsListWindow(self)
+        self.discogs_window.show()
 
     def createParcourir(self):
         self.groupeParcourir = QGroupBox("Parcourir")
@@ -717,9 +1027,14 @@ class MainWindow(QDialog):
         grid.addWidget(labelNum, line, 4)
         grid.addWidget(self.groupeediteurTag.zoneTextNum, line, 5)
         line = line + 1
+
         bouton_AutoAnalyse = QPushButton('Auto-analyse', self)
         bouton_AutoAnalyse.clicked.connect(self.clickMethodAutoAnalyse)
         grid.addWidget(bouton_AutoAnalyse, line, 0)
+
+        bouton_Discogs = QPushButton('Discogs', self)
+        bouton_Discogs.clicked.connect(self.open_new_window)
+        grid.addWidget(bouton_Discogs, line, 1)
 
         self.groupeediteurTag.setLayout(grid)
 
@@ -731,6 +1046,7 @@ class MainWindow(QDialog):
 
         grid = QGridLayout()
         grid.addWidget(boutonValider, 5, 4, 1, 1)
+
 
         self.groupeValider.setLayout(grid)
 
