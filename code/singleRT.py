@@ -18,7 +18,6 @@ from mutagen.id3 import ID3, TIT2, TPE1, TPE2, TALB, TRCK, TPOS, TCON,TDRC, TXXX
 import re
 import discogs_client
 
-
 from dotenv import load_dotenv
 
 #Discogs genre
@@ -81,19 +80,6 @@ def search_track_in_tracklist(song, discogs_tracks):
     return None
 
 
-
-#Pour le tableau de choix discogs
-#class MyTableWidget(QTableWidget):
-#    def __init__(self, parent=None):
-#        super().__init__(parent)
-
-#    def keyPressEvent(self, event):
-#        if event.key() == Qt.Key_Delete:
-#            selected_items = self.selectedItems()
-#            for item in selected_items:
-#                item.setText("")
-#        else:
-#            super().keyPressEvent(event)
 
 #ICI
 class MyTableWidget(QTableWidget):
@@ -214,6 +200,9 @@ class MusiqueFile:
         create_ImageInList_from_web(self.Images, purged_name, 10)
         create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
         create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
+        create_ImageInList_from_apple_music(self.Images, self.ArtisteDisplay, self.Titre)
+        create_ImageInList_from_deezer(self.Images, self.ArtisteDisplay, self.Titre)
+
 
     def get_image_from_url(self, url):
         create_ImageInList_from_Url(self.Images, url)
@@ -470,6 +459,7 @@ def download_and_handle_image_MARCHE_PAS(url, i, images_list):
     # Connecter le signal de fin du téléchargement à la fonction de traitement de l'image
     reply.finished.connect(handle_image_download)
 
+
 def create_ImageInList_from_web(Images, query, number_of_image):
     from qwant_search_image import qwant_get_image_urls
     try:
@@ -477,13 +467,39 @@ def create_ImageInList_from_web(Images, query, number_of_image):
     except:
         return
 
-    i = 0
     for url in urls:
         try:
             download_and_handle_image(url, Images)
-            i = i + 1
         except:
             pass
+
+
+def create_ImageInList_from_apple_music(images, artist, track):
+    from apple_music import get_song_artworks
+    try:
+        urls = get_song_artworks(artist, track, 5)
+    except:
+        return
+
+    for url in urls:
+        try:
+            download_and_handle_image(url, images)
+        except:
+            pass
+
+def create_ImageInList_from_deezer(images, artist, track):
+    from deezer import get_deezer_artworks
+    try:
+        urls = get_deezer_artworks(artist, track, 5)
+    except:
+        return
+
+    for url in urls:
+        try:
+            download_and_handle_image(url, images)
+        except:
+            pass
+
 
 def create_ImageInList_from_Url(Images, url):
     try:
