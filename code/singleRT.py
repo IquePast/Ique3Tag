@@ -42,6 +42,74 @@ def extract_unitary(audio, string):
     except:
         return ''
 
+def extraire_informations(chaine):
+    """
+    Traite une chaîne de texte pour extraire les informations de l'artiste, du titre,
+    et des artistes participants (featuring).
+
+    Args:
+        chaine (str): La chaîne de texte à traiter.
+
+    Returns:
+        dict: Un dictionnaire contenant 'titre', 'artiste', 'artisteFeat', et 'artisteAll'.
+    """
+    # Traitement de "myfreemp3"
+    chaine = re.sub(r'\s*myfreemp3\.\w+\s*(?=\.\w+$)', '', chaine)
+
+    # Enlever l'extension
+    chaine = chaine.replace(".mp3", "").replace(".flac", "")
+
+    # Normaliser les termes de featuring
+    chaine = chaine.replace("feat.", "ft.").replace("Feat.", "ft.").replace("Ft.", "ft.")\
+                   .replace("Featuring", "ft.").replace("featuring", "ft.")
+
+    # Assigner les parties aux variables artiste et titre
+    parts = chaine.split(" - ", 1)
+    if len(parts) == 2:
+        artiste = parts[0].strip()  # Supprime les espaces avant/après
+        titre = parts[1].strip()
+    else:
+        artiste = ""
+        titre = chaine.strip()
+
+    # Extraction des artistes "featuring"
+    parts = re.split(r'\s*ft\.\s*', artiste)
+    if len(parts) == 2:
+        artisteAll = parts[0].strip()  # Supprime les espaces avant/après
+        artisteFeat = parts[1].strip()
+    else:
+        artisteAll = artiste.strip()
+        artisteFeat = ""
+
+    # Nettoyage des artistes "featuring"
+    parts = re.split(r'\s*,\s*|\s*&\s*', artisteFeat)
+    artistes_feat_nettoyes = [artiste.strip() for artiste in parts]
+
+    # Enlever les doublons tout en conservant l'ordre
+    vue = set()
+    artistes_feat_nettoyes_sans_doublons = [x for x in artistes_feat_nettoyes if not (x in vue or vue.add(x))]
+    artisteFeat = ";".join(artistes_feat_nettoyes_sans_doublons)
+
+    # Nettoyage des artistes "all"
+    parts = re.split(r'\s*,\s*|\s*&\s*', artisteAll)
+    artistes_all_nettoyes = [artiste.strip() for artiste in parts]
+
+    if artistes_feat_nettoyes[0] != "":
+        artistes_all_nettoyes.extend(artistes_feat_nettoyes)
+
+    # Enlever les doublons tout en conservant l'ordre
+    vue = set()
+    artistes_all_nettoyes_sans_doublons = [x for x in artistes_all_nettoyes if not (x in vue or vue.add(x))]
+    artisteAll = ";".join(artistes_all_nettoyes_sans_doublons)
+
+    # Retourner les résultats dans un dictionnaire
+    return {
+        "titre": titre,
+        "artiste": artiste,
+        "artisteFeat": artisteFeat,
+        "artisteAll": artisteAll
+    }
+
 def search_track_in_tracklist(song, discogs_tracks):
     import difflib
     # Trouver la meilleure correspondance
@@ -83,7 +151,8 @@ def search_track_in_tracklist(song, discogs_tracks):
 
 #ICI
 class MyTableWidget(QTableWidget):
-    def __init__(self, rows, columns, parent=None):
+    def \
+            __init__(self, rows, columns, parent=None):
         super().__init__(rows, columns, parent)
         self.selected_cells = {}  # Stocke la cellule sélectionnée pour chaque colonne
 
@@ -92,6 +161,8 @@ class MyTableWidget(QTableWidget):
 
         # Connecter l'événement de clic sur les cellules
         self.cellClicked.connect(self.handle_cell_click)
+
+        self.last_filled_row = -1  # Initialise à -1, car aucune ligne n'est remplie au départ
 
     def handle_cell_click(self, row, column):
         # Accéder au modèle de sélection
@@ -152,6 +223,8 @@ class ImageLabel(QLabel):
         super().setPixmap(image)
 
 
+
+
 class MusiqueFile:
     def __init__(self, old_file_name, path):
         super().__init__()
@@ -197,11 +270,22 @@ class MusiqueFile:
         purged_name = self.old_file_name
         purged_name = purged_name.replace(purged_name[purged_name.find('myfreemp3'):purged_name.find('myfreemp3') + len('myfreemp3') + 4], '')
         purged_name = purged_name.replace('.mp3', '').replace('.flac', '')
-        create_ImageInList_from_web(self.Images, purged_name, 10)
-        create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
-        create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
-        create_ImageInList_from_apple_music(self.Images, self.ArtisteDisplay, self.Titre)
-        create_ImageInList_from_deezer(self.Images, self.ArtisteDisplay, self.Titre)
+        #create_ImageInList_from_web(self.Images, purged_name, 10)
+        #create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
+        #create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
+        song_info_from_extract = extraire_informations(purged_name)
+        if self.ArtisteDisplay == '':
+            artiste = song_info_from_extract["artiste"]
+        else:
+            artiste = self.ArtisteDisplay
+
+        if self.ArtisteDisplay == '':
+            titre = song_info_from_extract["titre"]
+        else:
+            titre = self.Titre
+
+        create_ImageInList_from_apple_music(self.Images, artiste, titre)
+        create_ImageInList_from_deezer(self.Images, artiste, titre)
 
 
     def get_image_from_url(self, url):
@@ -424,42 +508,6 @@ def download_and_handle_image(url, images_list):
     reply.deleteLater()
 
 
-def download_and_handle_image_MARCHE_PAS(url, i, images_list):
-    from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
-    from PyQt5.QtCore import QUrl, QEventLoop
-    network_manager = QNetworkAccessManager()
-
-    # Effectuer la requête pour télécharger l'image
-    request = QNetworkRequest(QUrl(url))
-    reply = network_manager.get(request)
-
-    def handle_image_download():
-        nonlocal reply  # Utilisé pour rendre reply accessible à l'intérieur de la fonction locale
-
-        if reply.error() == QNetworkReply.NoError:
-            # Lire les données de l'image
-            image_data = reply.readAll()
-
-            # Créer un pixmap à partir des données de l'image
-            pixmap = QPixmap()
-            pixmap.loadFromData(image_data)
-
-            # Créer une instance de ImageInList
-            image_from_web = ImageInList(str(i))
-            image_from_web.set_pixmap(pixmap)
-
-            # Ajouter l'image à la liste
-            images_list.append(image_from_web)
-        else:
-            print("Erreur lors du téléchargement de l'image:", reply.errorString())
-
-        # Fermer la réponse
-        reply.deleteLater()
-
-    # Connecter le signal de fin du téléchargement à la fonction de traitement de l'image
-    reply.finished.connect(handle_image_download)
-
-
 def create_ImageInList_from_web(Images, query, number_of_image):
     from qwant_search_image import qwant_get_image_urls
     try:
@@ -532,133 +580,62 @@ class DiscogsListWindow(QWidget):
     COL_DISCOGS_ANNEE = 7
     COL_DISCOGS_ALBUM = 8
     COL_DISCOGS_ALBUM_ARTIST = 9
+    COL_ARTWORK_URL = 10
 
-    def setListDiscogsTableur(self, ligne, colonne, textAecrire):
-        item = QTableWidgetItem()
-        self.ListDiscogs.tableWidget.setItem(ligne, colonne, item)
-        item.setText(textAecrire)
+    def setListDiscogsTableur(self, track_info):
+        """
+        Remplit une ligne spécifique avec les données fournies dans le dictionnaire TrackInfo.
+
+        :param ligne: Indice de la ligne à remplir.
+        :param track_info: Dictionnaire contenant les informations d'une piste.
+        """
+        # Mappage entre les colonnes et les clés du dictionnaire TrackInfo
+        column_mapping = {
+            self.COL_DISCOGS_TITRE: track_info.get("titre"),
+            self.COL_DISCOGS_ARTISTE_AS_DISPLAY: track_info.get("artiste"),
+            self.COL_DISCOGS_ARTISTE_REMIX: track_info.get("artiste_remix"),
+            self.COL_DISCOGS_ARTISTE_FEAT: track_info.get("artiste_ft"),
+            self.COL_DISCOGS_ARTISTE_ALL: track_info.get("artiste_all"),
+            self.COL_DISCOGS_GENRE: track_info.get("genre"),
+            self.COL_DISCOGS_STYLE: track_info.get("style"),
+            self.COL_DISCOGS_ANNEE: str(track_info.get("annee")),
+            self.COL_DISCOGS_ALBUM: track_info.get("album"),
+            self.COL_DISCOGS_ALBUM_ARTIST: track_info.get("artiste_album"),
+            self.COL_ARTWORK_URL: track_info.get("images_path"),
+        }
+
+        ligne = self.ListDiscogs.tableWidget.last_filled_row + 1
+
+        # Remplit les cellules correspondantes
+        for colonne, textAecrire in column_mapping.items():
+            if textAecrire is not None:  # Évite les valeurs None
+                item = QTableWidgetItem()
+                item.setText(textAecrire)
+                self.ListDiscogs.tableWidget.setItem(ligne, colonne, item)
+
+        self.ListDiscogs.tableWidget.last_filled_row = ligne
+
+    def fill_discogs_table_from_discogs_query(self, searched_song):
+        from discogs import get_discogs_track_details
+        tracks_info = get_discogs_track_details(searched_song, 5)
+        for track_info in tracks_info:
+            self.setListDiscogsTableur(track_info)
+
+    def fill_discogs_table_from_applemusic_query(self, artist, tracks):
+        from apple_music import get_itunes_track_details
+        tracks_info = get_itunes_track_details(artist, tracks, 5)
+        for track_info in tracks_info:
+            self.setListDiscogsTableur(track_info)
 
     def fill_discogs_table_from_internet_query(self):
-        searched_song = self.main_window.groupeediteurTag.zoneTextArtistAsDisplay.text() + " - " + self.main_window.groupeediteurTag.zoneTextTitre.text()
-        d = discogs_client.Client('ExampleApplication/0.1', user_token=my_discogs_user_token)
-        releases = d.search(searched_song, type='release')
-
         self.ListDiscogs.tableWidget.clearContents()
-        i = 0
+        self.ListDiscogs.tableWidget.last_filled_row = -1
+        Artists = self.main_window.groupeediteurTag.zoneTextArtistAsDisplay.text()
+        Titre = self.main_window.groupeediteurTag.zoneTextTitre.text()
+        searched_song = Artists + " - " + Titre
 
-        for intermediate_release in releases:
-
-            d = discogs_client.Client('ExampleApplication/0.1', user_token=my_discogs_user_token)
-            release = d.release(intermediate_release.id)
-
-            try:
-                track = search_track_in_tracklist(searched_song, release.tracklist)
-
-                if track is None:
-                    continue
-
-                # Title
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_TITRE, track.title)
-
-                # Gestion de artiste
-
-                # Savoir le type d'extraction
-                songArt = []
-                songRmx = []
-                songFt = []
-                songAll = []
-
-                # main artist
-
-                mainartist = ''
-                try:
-                    for artist in track.data['artists']:
-                        mainartist = mainartist + artist['name']
-                        if (artist['join'] != ''): mainartist = mainartist + ' ' + artist['join'] + ' '
-                        if (artist['name'] in songAll) == False: songAll.append(artist['name'])
-                except KeyError:
-                    for artist in release.data['artists']:
-                        mainartist = mainartist + artist['name']
-                        if (artist['join'] != ''): mainartist = mainartist + ' ' + artist['join'] + ' '
-                        if (artist['name'] in songAll) == False: songAll.append(artist['name'])
-
-                if mainartist == '':
-                    mainartist = release.artists[0].name
-                if not (songAll):
-                    songAll.append(release.artists[0].name)
-
-                # Credits - aditional artists
-                try:
-                    for artist in track.data['extraartists']:
-                        if artist['role'] == 'Featuring' and (artist['name'] in songFt) == False:
-                            songFt.append(artist['name'])
-                        elif artist['role'] == 'Remix' and (artist['name'] in songRmx) == False:
-                            songRmx.append(artist['name'])
-
-                        if (artist['name'] in songAll) == False: songAll.append(artist['name'])
-                except:
-                    pass
-
-                # main
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_ARTISTE_AS_DISPLAY, mainartist)
-
-                # Featuring
-                participant = ''
-                numParticipant = 0
-                for artists in songFt:
-                    if numParticipant > 0: participant = participant + ';'
-                    participant = participant + artists
-                    numParticipant = numParticipant + 1
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_ARTISTE_FEAT, participant)
-
-                # Remix
-                participant = ''
-                numParticipant = 0
-                for artists in songRmx:
-                    if numParticipant > 0: participant = participant + ';'
-                    participant = participant + artists
-                    numParticipant = numParticipant + 1
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_ARTISTE_REMIX, participant)
-
-                # All credit
-                participant = ''
-                numParticipant = 0
-                for artists in songAll:
-                    if numParticipant > 0: participant = participant + ';'
-                    participant = participant + artists
-                    numParticipant = numParticipant + 1
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_ARTISTE_ALL, participant)
-
-                # Album
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_ALBUM, release.title)
-                # Album Artiste
-                if release.artists[0].name == 'Various':
-                    self.setListDiscogsTableur(i, self.COL_DISCOGS_ALBUM_ARTIST, 'Various Artists')
-                else:
-                    self.setListDiscogsTableur(i, self.COL_DISCOGS_ALBUM_ARTIST, release.artists[0].name)
-
-                # Genre
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_GENRE, release.genres[0])
-                # Style
-                listdesStyles = ''
-                numStyle = 0
-                try:
-                    for styleZik in release.styles:
-                        if numStyle > 0: listdesStyles = listdesStyles + ';'
-                        listdesStyles = listdesStyles + styleZik
-                        numStyle = numStyle + 1
-                except:
-                    listdesStyles = ''
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_STYLE, listdesStyles)
-
-                # Date
-                self.setListDiscogsTableur(i, self.COL_DISCOGS_ANNEE, str(release.year))
-
-                i = i + 1
-                if i == 10:
-                    break
-            except:
-                pass
+        self.fill_discogs_table_from_discogs_query(searched_song)
+        self.fill_discogs_table_from_applemusic_query(Artists, Titre)
 
     def write_to_main_window(self):
         # Dictionnaire associant les colonnes aux champs de groupeediteurTag
@@ -693,12 +670,16 @@ class DiscogsListWindow(QWidget):
 
         def createTableurDiscogs(self):
             self.ListDiscogs = QWidget()
-            self.ListDiscogs.tableWidget = MyTableWidget(100, 10)
+            self.ListDiscogs.tableWidget = MyTableWidget(100, 11)
             self.ListDiscogs.tableWidget.setRowCount(100)
-            self.ListDiscogs.tableWidget.setColumnCount(10)
+            self.ListDiscogs.tableWidget.setColumnCount(11)
             self.ListDiscogs.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
             self.ListDiscogs.tableWidget.setHorizontalHeaderLabels(
-                ['Titre', 'Artiste As Display', 'Artiste Featuring', 'Artiste Remix', 'Artiste All', 'Genre', 'Style', 'Annee', 'Album', 'Artist Album'])
+                ['Titre', 'Artiste As Display', 'Artiste Featuring', 'Artiste Remix', 'Artiste All', 'Genre', 'Style', 'Annee', 'Album', 'Artist Album', 'Image Url'])
+            # Définir des largeurs spécifiques pour les colonnes
+            column_widths = [100, 100, 80, 80, 150, 100, 100, 80, 100, 100, 250]  # Largeurs personnalisées
+            for col, width in enumerate(column_widths):
+                self.ListDiscogs.tableWidget.setColumnWidth(col, width)
 
             tab1hbox = QHBoxLayout()
             tab1hbox.setContentsMargins(5, 5, 5, 5)
@@ -708,12 +689,29 @@ class DiscogsListWindow(QWidget):
             self.ListDiscogs.tableWidget.setItem(0, 1, item)
             self.ListDiscogs.setLayout(tab1hbox)
 
+        def createImageViewer(self):
+            self.groupeImageViewer = QGroupBox("Cover")
+            self.groupeImageViewer.photoViewer = ImageLabel()
+            self.groupeImageViewer.labelPictureInformation = QLabel("-")
+            self.groupeImageViewer.labelPictureInformation.setAlignment(Qt.AlignCenter)
+            gridImageViewer = QGridLayout()
+
+            gridImageViewer.addWidget(self.groupeImageViewer.photoViewer, 0, 0, 10, 3)
+            gridImageViewer.addWidget(self.groupeImageViewer.labelPictureInformation, 10, 0, 1, 3)
+
+            # Utiliser des stretch factors pour équilibrer l'espace entre les colonnes
+            #gridImageViewer.setColumnStretch(0, 1)
+            #gridImageViewer.setColumnStretch(1, 1)
+            #gridImageViewer.setColumnStretch(2, 2)  # Donne plus d'espace à la colonne 2
+
+            self.groupeImageViewer.setLayout(gridImageViewer)
+
         # Référence à la fenêtre principale
         self.main_window = main_window
 
         # Configuration de la nouvelle fenêtre
         self.setWindowTitle("Remplissage via Discogs")
-        self.setMinimumSize(1000, 300)
+        self.setMinimumSize(1700, 500)
 
         # Creation Bouton search
         discogs_search = QPushButton("Recherche", self)
@@ -721,6 +719,8 @@ class DiscogsListWindow(QWidget):
 
         #Creation du tableaur discogs
         createTableurDiscogs(self)
+        # Creation Image viewer
+        createImageViewer(self)
 
         # Creation Bouton Hello World
         discogs_valider = QPushButton("Hello World", self)
@@ -731,6 +731,11 @@ class DiscogsListWindow(QWidget):
         grid.addWidget(discogs_search, 0, 0)
         grid.addWidget(self.ListDiscogs, 1, 0, 5, 10)
         grid.addWidget(discogs_valider, 6, 0)
+        grid.addWidget(self.groupeImageViewer, 0, 11, 7, 1)  # Étendre sur toutes les lignes (1 colonne à droite)
+
+        # Définition des ratios d'étirement des colonnes
+        grid.setColumnStretch(0, 3)  # Deux tiers pour la partie gauche
+        grid.setColumnStretch(11, 1)  # Un tiers pour la partie droite
         self.setLayout(grid)
 
 class MainWindow(QDialog):
@@ -840,68 +845,13 @@ class MainWindow(QDialog):
             song_info.saveTag()
 
     def clickMethodAutoAnalyse(self):
-        # Expression régulière pour trouver et enlever "myfreemp3.xxx" si ce n'est pas à la fin de la chaîne
         chaine = self.groupeediteurTag.zoneTextFileName.text()
-        #traitement myfreemp3
-        chaine = re.sub(r'\s*myfreemp3\.\w+\s*(?=\.\w+$)', '', chaine)
-        # Enlever l'extension
-        chaine = chaine.replace(".mp3", "").replace(".flac", "")
-        # Enlever l'extension
-        chaine = chaine.replace("feat.", "ft.").replace("Feat.", "ft.").replace("Ft.", "ft.").replace("Featuring", "ft.").replace("featuring", "ft.")
-        # Assigner les parties aux variables artiste et titre
-        parts = chaine.split(" - ", 1)
-        if len(parts) == 2:
-            artiste = parts[0].strip()  # Supprime les espaces avant/après
-            titre = parts[1].strip()
-        else:
-            artiste = ""
-            titre = chaine.strip()
+        song_info_from_extract = extraire_informations(chaine)
 
-        self.groupeediteurTag.zoneTextTitre.setText(titre)
-        self.groupeediteurTag.zoneTextArtistAsDisplay.setText(artiste)
-
-        parts = re.split(r'\s*feat.\s*|\s*ft.\s*|\s*Ft.\s*', artiste)
-        if len(parts) == 2:
-            artisteAll = parts[0].strip()  # Supprime les espaces avant/après
-            artisteFeat = parts[1].strip()
-        else:
-            artisteAll = artiste.strip()
-            artisteFeat = ""
-
-        parts = re.split(r'\s*,\s*|\s*&\s*', artisteFeat)
-        artistes_feat_nettoyes = [artiste.strip() for artiste in parts]
-        # Enlever les doublons tout en conservant l'ordre avec un set
-        vue = set()
-        artistes_feat_nettoyes_sans_doublons = [x for x in artistes_feat_nettoyes if not (x in vue or vue.add(x))]
-
-        artisteFeat = ";".join(artistes_feat_nettoyes_sans_doublons)
-
-        parts = re.split(r'\s*,\s*|\s*&\s*', artisteAll)
-        artistes_all_nettoyes = [artiste.strip() for artiste in parts]
-
-        if artistes_feat_nettoyes[0] != "":
-            artistes_all_nettoyes.extend(artistes_feat_nettoyes)
-        # Enlever les doublons tout en conservant l'ordre avec un set
-        vue = set()
-        artistes_all_nettoyes_sans_doublons = [x for x in artistes_all_nettoyes if not (x in vue or vue.add(x))]
-
-        artisteAll = ";".join(artistes_all_nettoyes_sans_doublons)
-
-
-        self.groupeediteurTag.zoneTextArtistFeaturing.setText(artisteFeat)
-        self.groupeediteurTag.zoneTextArtistAll.setText(artisteAll)
-
-        #parts = chaine.split(" & ", 1)
-        #self.Titre = groupeediteurTag.zoneTextTitre.text()
-        #self.ArtisteRemix = groupeediteurTag.zoneTextArtistRemix.text()
-
-        #self.Annee = groupeediteurTag.zoneTextAnnee.text()
-        #self.Style = groupeediteurTag.zoneTextStyle.text()
-        #self.Genre = groupeediteurTag.zoneTextGenre.text()
-        #self.Disk = groupeediteurTag.zoneTextDisc.text()
-        #self.Track = groupeediteurTag.zoneTextNum.text()
-        #self.Album = groupeediteurTag.zoneTextAlbum.text()
-        #self.ArtisteAlbum = groupeediteurTag.zoneTextAlbumArtist.text()
+        self.groupeediteurTag.zoneTextTitre.setText(song_info_from_extract["titre"])
+        self.groupeediteurTag.zoneTextArtistAsDisplay.setText(song_info_from_extract["artiste"])
+        self.groupeediteurTag.zoneTextArtistFeaturing.setText(song_info_from_extract["artisteFeat"])
+        self.groupeediteurTag.zoneTextArtistAll.setText(song_info_from_extract["artisteAll"])
 
     def open_new_window(self):
         # Créer et afficher la nouvelle fenêtre
@@ -944,8 +894,7 @@ class MainWindow(QDialog):
         self.groupeImageViewer.selectedIndices = []
         boutonValider = QPushButton('Rech. Auto', self)
         boutonValider.clicked.connect(self.clickMethodSearchOneSongImage)
-        boutonValider2 = QPushButton('Rech. Auto. tt Musique', self)
-        boutonValider2.clicked.connect(self.clickMethodSearchAllImage)
+
         boutonValider3 = QPushButton('Ajout Via Url', self)
         boutonValider3.clicked.connect(self.clickMethodAddOneSongImageFromUrl)
         self.groupeImageViewer.photoViewer = ImageLabel()
@@ -954,7 +903,8 @@ class MainWindow(QDialog):
         gridImageViewer = QGridLayout()
         gridImageViewer.addWidget(self.groupeImageViewer.ListImage, 0, 0, 9, 2)
         gridImageViewer.addWidget(boutonValider, 9, 0, 1, 1)
-        gridImageViewer.addWidget(boutonValider2, 9, 1, 1, 1)
+
+
         self.groupeImageViewer.zoneTextUrlAjoutManuel = QLineEdit(self)
         gridImageViewer.addWidget(self.groupeImageViewer.zoneTextUrlAjoutManuel, 10, 0, 1, 1)
         gridImageViewer.addWidget(boutonValider3, 10, 1, 1, 1)
@@ -968,6 +918,17 @@ class MainWindow(QDialog):
         gridImageViewer.setColumnStretch(2, 2)  # Donne plus d'espace à la colonne 2
 
         self.groupeImageViewer.setLayout(gridImageViewer)
+
+    def create_groupe_action(self):
+        self.groupeAction = QGroupBox("Action")
+
+        #Bouton pour rechercher les information
+        bouton_valider2 = QPushButton('Rech. Auto. tt Musique', self)
+        bouton_valider2.clicked.connect(self.clickMethodSearchAllImage)
+
+        grid_groupe_action = QGridLayout()
+        grid_groupe_action.addWidget(bouton_valider2, 0, 0)
+        self.groupeAction.setLayout(grid_groupe_action)
 
     def createEditeurTag(self):
         self.groupeediteurTag = QGroupBox("Editeur ID3tag")
@@ -1074,6 +1035,7 @@ class MainWindow(QDialog):
 
         self.createParcourir()
         self.createListePistes()
+        self.create_groupe_action()
         self.createImageViewer()
         self.createEditeurTag()
         self.createValider()
@@ -1081,7 +1043,8 @@ class MainWindow(QDialog):
 
         main_layout = QGridLayout()
         main_layout.addWidget(self.groupeParcourir, 0, 0, 1, 2)
-        main_layout.addWidget(self.groupeListPistes, 1, 0, 6, 2)
+        main_layout.addWidget(self.groupeListPistes, 1, 0, 5, 2)
+        main_layout.addWidget(self.groupeAction, 6, 0, 1, 2)
 
         main_layout.addWidget(self.groupeImageViewer, 0, 2, 3, 5)
         main_layout.addWidget(self.groupeediteurTag, 3, 2, 3, 5)
