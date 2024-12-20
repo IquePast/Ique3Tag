@@ -151,8 +151,7 @@ def search_track_in_tracklist(song, discogs_tracks):
 
 #ICI
 class MyTableWidget(QTableWidget):
-    def \
-            __init__(self, rows, columns, parent=None):
+    def __init__(self, rows, columns, parent=None):
         super().__init__(rows, columns, parent)
         self.selected_cells = {}  # Stocke la cellule sélectionnée pour chaque colonne
 
@@ -163,6 +162,10 @@ class MyTableWidget(QTableWidget):
         self.cellClicked.connect(self.handle_cell_click)
 
         self.last_filled_row = -1  # Initialise à -1, car aucune ligne n'est remplie au départ
+
+    def setPhotoViewer(self, photo_viewer):
+        """Permet de définir le viewer pour afficher les images."""
+        self.photo_viewer = photo_viewer
 
     def handle_cell_click(self, row, column):
         # Accéder au modèle de sélection
@@ -184,6 +187,49 @@ class MyTableWidget(QTableWidget):
             index = self.model().index(row, column)
             selection_model.select(index, QItemSelectionModel.Select)
             self.selected_cells[column] = (row, column)
+
+        # Vérifier si la colonne est "Image Url"
+        if column == 10 and self.photo_viewer:  # Index de la colonne "Image Url"
+            item = self.item(row, column)
+            if item:
+                url = item.text()
+                self.display_image_from_url(url)
+            else:
+                self.photo_viewer.fill_with_blank()
+
+    def display_image_from_url(self, url):
+        pixmap = create_pixmap_from_url(url)
+        self.photo_viewer.update_from_pixmap(pixmap)
+
+class photoViewer:
+    def __init__(self):
+        self.Image = ImageLabel()
+        self.pixmap_original = None
+        self.labelPictureInformation = QLabel("-")
+        self.labelPictureInformation.setAlignment(Qt.AlignCenter)
+
+    def update_from_pixmap(self, pixmap):
+        """Met à jour le viewer avec le pixmap téléchargé."""
+        if pixmap is None:
+            self.Image.fill_with_blank()
+            self.pixmap_original = None
+            self.labelPictureInformation.setText("-")
+        else:
+            aspect_ratio_mode = Qt.KeepAspectRatio
+            self.pixmap_original = pixmap
+            pixmap_resized = pixmap.scaled(300, 300, aspect_ratio_mode)
+            self.Image.setPixmap(pixmap_resized)
+            self.labelPictureInformation.setText(
+                "" + str(pixmap.height()) + "x" + str(pixmap.width()))
+
+    def fill_with_blank(self):
+        self.Image.fill_with_blank()
+        self.labelPictureInformation.setText("-")
+        self.pixmap_original = None
+
+    def get_pixmap_original(self):
+        return self.pixmap_original
+
 
 class ImageInList:
     def __init__(self, nameInlist):
@@ -246,7 +292,9 @@ class MusiqueFile:
         self.Track = None
         self.Album = None
         self.ArtisteAlbum = None
-        self.Images = []
+        self.Images = [] #a virer apres?
+        self.Image = None # image qu'on a choisi
+
         self.selectedIndices = []
         noneImage = ImageInList("None")
         self.Images.append(noneImage)
@@ -264,6 +312,7 @@ class MusiqueFile:
                 self.Images.append(coverInSongFile)
                 #pour qu'on selectionne de base cette image a la premiere ouverture
                 self.selectedIndices.append(len(self.Images)-1)
+                self.Image = pixmap
                 break
 
     def get_image_from_web(self):
@@ -319,6 +368,7 @@ class MusiqueFile:
         self.Track = groupeediteurTag.zoneTextNum.text()
         self.Album = groupeediteurTag.zoneTextAlbum.text()
         self.ArtisteAlbum = groupeediteurTag.zoneTextAlbumArtist.text()
+        self.Image = groupeediteurTag.photoViewer.get_pixmap_original()
 
         self.ImageViewer_save_selection(groupeImageViewer)
 
@@ -452,60 +502,113 @@ class Mp3File(MusiqueFile):
             audio.delall(tag)
 
         # Créer un objet APIC pour l'image
-        if self.selectedIndices:
-            image_to_display = self.Images[self.selectedIndices[0]]
+        if self.Image:
+            image_mime = 'image/jpeg'
+            image_data = convert_qpixmap_to_bytes(self.Image,
+                                                  image_format=image_mime.split('/')[1].upper())
+            apic = APIC(
+                encoding=3,  # 3 = UTF-8
+                mime=image_mime,  # 'image/jpeg' ou 'image/png'
+                type=3,  # 3 = Cover (front)
+                desc=u'Cover',
+                data=image_data
+            )
 
-            if image_to_display is not None:
-                if image_to_display.pixmap is not None:
-                    image_mime = 'image/jpeg'
-                    image_data = convert_qpixmap_to_bytes(image_to_display.pixmap, image_format=image_mime.split('/')[1].upper())
-                    apic = APIC(
-                        encoding=3,  # 3 = UTF-8
-                        mime=image_mime,  # 'image/jpeg' ou 'image/png'
-                        type=3,  # 3 = Cover (front)
-                        desc=u'Cover',
-                        data=image_data
-                    )
+            audio.add(apic)
 
-                    audio.add(apic)
+        #if self.selectedIndices:
+        #    image_to_display = self.Images[self.selectedIndices[0]]
+
+        #    if image_to_display is not None:
+            #        if image_to_display.pixmap is not None:
+            #            image_mime = 'image/jpeg'
+            #            image_data = convert_qpixmap_to_bytes(image_to_display.pixmap, image_format=image_mime.split('/')[1].upper())
+            #            apic = APIC(
+            #                encoding=3,  # 3 = UTF-8
+            #               mime=image_mime,  # 'image/jpeg' ou 'image/png'
+            #               type=3,  # 3 = Cover (front)
+            #               desc=u'Cover',
+            #               data=image_data
+            #           )
+
+        #           audio.add(apic)
 
         audio.save()
 
 
 
-def download_and_handle_image(url, images_list):
+
+def create_pixmap_from_url(url):
+    """
+    Télécharge une image à partir d'une URL et retourne un QPixmap.
+
+    Args:
+        url (str): L'URL de l'image.
+
+    Returns:
+        QPixmap | None: Le QPixmap de l'image téléchargée, ou None en cas d'erreur.
+    """
     from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
     from PyQt5.QtCore import QUrl, QEventLoop
-    network_manager = QNetworkAccessManager()
+    from PyQt5.QtGui import QPixmap
+    if not url or not isinstance(url, str):
+        print("URL invalide.")
+        return None
 
-    # Effectuer la requête pour télécharger l'image
-    request = QNetworkRequest(QUrl(url))
-    reply = network_manager.get(request)
+    try:
+        # Vérification de l'URL
+        qurl = QUrl(url)
+        if not qurl.isValid() and not qurl.isLocalFile() and not qurl.isRelative():
+            print(f"URL non valide : {url}")
+            return None
 
-    # Utiliser un QEventLoop pour attendre la fin du téléchargement
-    loop = QEventLoop()
-    reply.finished.connect(loop.quit)
-    loop.exec_()
+        # Gestionnaire réseau
+        network_manager = QNetworkAccessManager()
+        request = QNetworkRequest(qurl)
 
-    if reply.error() == QNetworkReply.NoError:
-        # Lire les données de l'image
+        # Envoyer la requête
+        reply = network_manager.get(request)
+
+        # Attendre la fin de la requête avec un QEventLoop
+        loop = QEventLoop()
+        reply.finished.connect(loop.quit)
+        loop.exec_()
+
+        # Vérifier les erreurs de réseau
+        if reply.error() != QNetworkReply.NoError:
+            print(f"Erreur réseau : {reply.errorString()}")
+            return None
+
+        # Lire les données
         image_data = reply.readAll()
+        if not image_data:
+            print("Les données de l'image sont vides.")
+            return None
 
-        # Créer un pixmap à partir des données de l'image
+        # Créer le QPixmap
         pixmap = QPixmap()
-        pixmap.loadFromData(image_data)
+        if not pixmap.loadFromData(image_data):
+            print("Impossible de charger l'image à partir des données.")
+            return None
 
-        # Créer une instance de ImageInList
+        return pixmap
+
+    except Exception as e:
+        print(f"Une erreur inattendue s'est produite : {e}")
+        return None
+
+    finally:
+        # Nettoyer
+        reply.deleteLater()
+
+def download_and_handle_image(url, images_list):
+    pixmap = create_pixmap_from_url(url)
+    if pixmap is not None:
         image_from_web = ImageInList(str(url))
         image_from_web.set_pixmap(pixmap)
-
-        # Ajouter l'image à la liste
-        images_list.append(image_from_web)
+        return image_from_web
     else:
-        print("Erreur lors du téléchargement de l'image:", reply.errorString())
-
-    # Fermer la réponse
-    reply.deleteLater()
+        return None
 
 
 def create_ImageInList_from_web(Images, query, number_of_image):
@@ -650,6 +753,7 @@ class DiscogsListWindow(QWidget):
             self.COL_DISCOGS_ANNEE: self.main_window.groupeediteurTag.zoneTextAnnee,
             self.COL_DISCOGS_ALBUM: self.main_window.groupeediteurTag.zoneTextAlbum,
             self.COL_DISCOGS_ALBUM_ARTIST: self.main_window.groupeediteurTag.zoneTextAlbumArtist,
+            self.COL_ARTWORK_URL: self.main_window.groupeediteurTag.photoViewer,
         }
 
         # Boucle sur chaque colonne et champ associé
@@ -663,7 +767,13 @@ class DiscogsListWindow(QWidget):
                 if item is not None:
                     # Obtenir le texte de la cellule et l'écrire dans le champ correspondant
                     cell_value = item.text()
-                    field.setText(cell_value)
+                    if column != self.COL_ARTWORK_URL:
+                        field.setText(cell_value)
+                    else:
+                        pixmap = create_pixmap_from_url(cell_value)
+                        field.update_from_pixmap(pixmap)
+
+
 
     def __init__(self, main_window):
         super().__init__()
@@ -691,13 +801,12 @@ class DiscogsListWindow(QWidget):
 
         def createImageViewer(self):
             self.groupeImageViewer = QGroupBox("Cover")
-            self.groupeImageViewer.photoViewer = ImageLabel()
-            self.groupeImageViewer.labelPictureInformation = QLabel("-")
-            self.groupeImageViewer.labelPictureInformation.setAlignment(Qt.AlignCenter)
+            self.groupeImageViewer.photoViewer = photoViewer()
+
             gridImageViewer = QGridLayout()
 
-            gridImageViewer.addWidget(self.groupeImageViewer.photoViewer, 0, 0, 10, 3)
-            gridImageViewer.addWidget(self.groupeImageViewer.labelPictureInformation, 10, 0, 1, 3)
+            gridImageViewer.addWidget(self.groupeImageViewer.photoViewer.Image, 0, 0, 10, 3)
+            gridImageViewer.addWidget(self.groupeImageViewer.photoViewer.labelPictureInformation, 10, 0, 1, 3)
 
             # Utiliser des stretch factors pour équilibrer l'espace entre les colonnes
             #gridImageViewer.setColumnStretch(0, 1)
@@ -721,6 +830,8 @@ class DiscogsListWindow(QWidget):
         createTableurDiscogs(self)
         # Creation Image viewer
         createImageViewer(self)
+
+        self.ListDiscogs.tableWidget.setPhotoViewer(self.groupeImageViewer.photoViewer)
 
         # Creation Bouton Hello World
         discogs_valider = QPushButton("Hello World", self)
@@ -793,6 +904,8 @@ class MainWindow(QDialog):
         groupeediteurTag.zoneTextDisc.setText(str(song_info.Disk))
         groupeediteurTag.zoneTextNum.setText(str(song_info.Track))
         groupeediteurTag.zoneTextAlbumArtist.setText(song_info.ArtisteAlbum)
+
+        groupeediteurTag.photoViewer.update_from_pixmap(song_info.Image)
          # self.ArtisteAlbum = None
 
     def fill_groupeImageViewer_from_song_info(self, groupeImageViewer, song_info):
@@ -966,36 +1079,40 @@ class MainWindow(QDialog):
         labelNum = QLabel("#")
         self.groupeediteurTag.zoneTextNum = QLineEdit(self)
 
+        self.groupeediteurTag.photoViewer = photoViewer()
+
         grid = QGridLayout()
-        line = 1
+        line = 0
         grid.addWidget(labelFileName, line, 0, 1, 2)
-        grid.addWidget(self.groupeediteurTag.zoneTextFileName, line, 2, 1, 9)
+        grid.addWidget(self.groupeediteurTag.zoneTextFileName, line, 1, 1, 5)
         line = line+1
         grid.addWidget(labelTitre, line, 0, 1, 2)
-        grid.addWidget(self.groupeediteurTag.zoneTextTitre, line, 2, 1, 9)
+        grid.addWidget(self.groupeediteurTag.zoneTextTitre, line, 1, 1, 5)
         line = line+1
         grid.addWidget(labelArtistAsDisplay, line, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextArtistAsDisplay, line, 2, 1, 9)
+        grid.addWidget(self.groupeediteurTag.zoneTextArtistAsDisplay, line, 1, 1, 5)
         line = line+1
         grid.addWidget(labelArtistFeaturing, line, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextArtistFeaturing, line, 2, 1, 9)
+        grid.addWidget(self.groupeediteurTag.zoneTextArtistFeaturing, line, 1, 1, 5)
         line = line+1
         grid.addWidget(labelArtistRemix, line, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextArtistRemix, line, 2, 1, 9)
+        grid.addWidget(self.groupeediteurTag.zoneTextArtistRemix, line, 1, 1, 5)
         line = line+1
         grid.addWidget(labelArtistAll, line, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextArtistAll, line, 2, 1, 9)
+        grid.addWidget(self.groupeediteurTag.zoneTextArtistAll, line, 1, 1, 5)
         line = line+1
         grid.addWidget(labelAlbumArtist, line, 0, 1, 3)
-        grid.addWidget(self.groupeediteurTag.zoneTextAlbumArtist, line, 2, 1, 9)
+        grid.addWidget(self.groupeediteurTag.zoneTextAlbumArtist, line, 1, 1, 5)
         line = line + 1
         grid.addWidget(labelAlbum, line, 0, 1, 2)
-        grid.addWidget(self.groupeediteurTag.zoneTextAlbum, line, 1, 1, 3)
+        grid.addWidget(self.groupeediteurTag.zoneTextAlbum, line, 1, 1, 5)
+
         line = line + 1
         grid.addWidget(labelGenre, line, 0, 1, 2)
-        grid.addWidget(self.groupeediteurTag.zoneTextGenre, line, 1, 1, 3)
-        grid.addWidget(labelStyle, line, 4)
-        grid.addWidget(self.groupeediteurTag.zoneTextStyle, line, 5, 1, 5)
+        grid.addWidget(self.groupeediteurTag.zoneTextGenre, line, 1, 1, 1)
+        grid.addWidget(labelStyle, line, 2)
+        grid.addWidget(self.groupeediteurTag.zoneTextStyle, line, 3, 1, 3)
+
         line = line + 1
         grid.addWidget(labelAnnee, line, 0)
         grid.addWidget(self.groupeediteurTag.zoneTextAnnee, line, 1)
@@ -1005,6 +1122,9 @@ class MainWindow(QDialog):
         grid.addWidget(self.groupeediteurTag.zoneTextNum, line, 5)
         line = line + 1
 
+        grid.addWidget(self.groupeediteurTag.photoViewer.Image, 0, 6, 10, 1)
+        grid.addWidget(self.groupeediteurTag.photoViewer.labelPictureInformation, 10, 6, 1, 1)
+
         bouton_AutoAnalyse = QPushButton('Auto-analyse', self)
         bouton_AutoAnalyse.clicked.connect(self.clickMethodAutoAnalyse)
         grid.addWidget(bouton_AutoAnalyse, line, 0)
@@ -1012,6 +1132,16 @@ class MainWindow(QDialog):
         bouton_Discogs = QPushButton('Discogs', self)
         bouton_Discogs.clicked.connect(self.open_new_window)
         grid.addWidget(bouton_Discogs, line, 1)
+
+        grid.setColumnStretch(0, 4)
+        grid.setColumnStretch(1, 6)
+        grid.setColumnStretch(2, 1)
+        grid.setColumnStretch(3, 6)
+        grid.setColumnStretch(4, 1)
+        grid.setColumnStretch(5, 2)
+        grid.setColumnStretch(6, 10)
+
+
 
         self.groupeediteurTag.setLayout(grid)
 
