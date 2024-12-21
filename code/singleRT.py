@@ -292,59 +292,25 @@ class MusiqueFile:
         self.Track = None
         self.Album = None
         self.ArtisteAlbum = None
-        self.Images = [] #a virer apres?
-        self.Image = None # image qu'on a choisi
+        self.Image = None        # image qu'on a choisi
+        self.tracks_info = []    # data trouvé sur internet
 
-        self.tracks_info = []
-
-        self.selectedIndices = []
-        noneImage = ImageInList("None")
-        self.Images.append(noneImage)
 
     def get_name_in_list(self):
         return self.old_file_name
-
-    def extract_image(self):
-        for tag in self.metadata.tags.values():
-            if tag.FrameID == 'APIC':
-                coverInSongFile = ImageInList("Cover in file")
-                pixmap = QPixmap()
-                pixmap.loadFromData(tag.data)
-                coverInSongFile.set_pixmap(pixmap)
-                self.Images.append(coverInSongFile)
-                #pour qu'on selectionne de base cette image a la premiere ouverture
-                self.selectedIndices.append(len(self.Images)-1)
-                self.Image = pixmap
-                break
 
     def get_image_from_web(self):
         purged_name = self.old_file_name
         purged_name = purged_name.replace(purged_name[purged_name.find('myfreemp3'):purged_name.find('myfreemp3') + len('myfreemp3') + 4], '')
         purged_name = purged_name.replace('.mp3', '').replace('.flac', '')
-        #create_ImageInList_from_web(self.Images, purged_name, 10)
-        #create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
-        #create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
-        song_info_from_extract = extraire_informations(purged_name)
-        if self.ArtisteDisplay == '':
-            artiste = song_info_from_extract["artiste"]
-        else:
-            artiste = self.ArtisteDisplay
-
-        if self.ArtisteDisplay == '':
-            titre = song_info_from_extract["titre"]
-        else:
-            titre = self.Titre
-
-        create_ImageInList_from_apple_music(self.Images, artiste, titre)
-        create_ImageInList_from_deezer(self.Images, artiste, titre)
+        create_ImageInList_from_web(self.Images, purged_name, 10)
+        create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
+        create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
 
     def get_tracks_info_from_web(self):
         purged_name = self.old_file_name
         purged_name = purged_name.replace(purged_name[purged_name.find('myfreemp3'):purged_name.find('myfreemp3') + len('myfreemp3') + 4], '')
         purged_name = purged_name.replace('.mp3', '').replace('.flac', '')
-        #create_ImageInList_from_web(self.Images, purged_name, 10)
-        #create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
-        #create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
         song_info_from_extract = extraire_informations(purged_name)
         if self.ArtisteDisplay == '':
             artiste = song_info_from_extract["artiste"]
@@ -356,11 +322,8 @@ class MusiqueFile:
         else:
             titre = self.Titre
 
-        #create_ImageInList_from_apple_music(self.Images, artiste, titre)
-        #create_ImageInList_from_deezer(self.Images, artiste, titre)
-
-        self.tracks_info.extend(self.get_tracks_info_from_applemusic_query(artiste, titre))
         self.tracks_info.extend(self.get_tracks_info_from_discogs_query(artiste, titre))
+        self.tracks_info.extend(self.get_tracks_info_from_applemusic_query(artiste, titre))
 
     def get_tracks_info_from_discogs_query(self, artiste, titre):
         from discogs import get_discogs_track_details
@@ -373,25 +336,10 @@ class MusiqueFile:
         tracks_info = get_itunes_track_details(artiste, titre, 5)
         return tracks_info
 
-
     def get_image_from_url(self, url):
         create_ImageInList_from_Url(self.Images, url)
 
-
-    def ImageViewer_save_selection(self, groupeImageViewer):
-        self.selectedIndices = []
-        for item in groupeImageViewer.ListImage.selectedIndexes():
-            self.selectedIndices.append(item.row())
-
-    def ImageViewer_restore_selection(self, groupeImageViewer):
-        groupeImageViewer.ListImage.clearSelection()
-        for index in self.selectedIndices:
-            item = groupeImageViewer.ListImage.item(index)
-            item.setSelected(True)
-            # Mettre à jour explicitement currentItem
-            groupeImageViewer.ListImage.setCurrentItem(item)
-
-    def set_data_from_groupeediteurTag(self, groupeediteurTag, groupeImageViewer):
+    def set_data_from_groupeediteurTag(self, groupeediteurTag):
         self.Artiste = groupeediteurTag.zoneTextTitre.text()
         self.Titre = groupeediteurTag.zoneTextTitre.text()
         self.ArtisteDisplay = groupeediteurTag.zoneTextArtistAsDisplay.text()
@@ -406,22 +354,6 @@ class MusiqueFile:
         self.Album = groupeediteurTag.zoneTextAlbum.text()
         self.ArtisteAlbum = groupeediteurTag.zoneTextAlbumArtist.text()
         self.Image = groupeediteurTag.photoViewer.get_pixmap_original()
-
-        self.ImageViewer_save_selection(groupeImageViewer)
-
-        #selectedImage = get_object_from_list(groupeImageViewer.ListImage.currentItem(), self.Images)
-        #if selectedImage is not None:
-        #    pixmap = selectedImage.get_pixmap()
-            #if pixmap is None:
-                #self.groupeImageViewer.photoViewer.fill_with_blank()
-                #self.groupeImageViewer.labelPictureInformation.setText("-")
-            #else:
-                #aspectRatioMode = Qt.KeepAspectRatio
-                #pixmap_resized = pixmap.scaled(300, 300, aspectRatioMode)
-                #self.groupeImageViewer.photoViewer.setPixmap(pixmap_resized)
-                #self.groupeImageViewer.labelPictureInformation.setText(
-                #    "" + str(pixmap.height()) + "x" + str(pixmap.width()))
-
 
 class FlacFile(MusiqueFile):
     def __init__(self, old_file_name, path):
@@ -552,24 +484,6 @@ class Mp3File(MusiqueFile):
             )
 
             audio.add(apic)
-
-        #if self.selectedIndices:
-        #    image_to_display = self.Images[self.selectedIndices[0]]
-
-        #    if image_to_display is not None:
-            #        if image_to_display.pixmap is not None:
-            #            image_mime = 'image/jpeg'
-            #            image_data = convert_qpixmap_to_bytes(image_to_display.pixmap, image_format=image_mime.split('/')[1].upper())
-            #            apic = APIC(
-            #                encoding=3,  # 3 = UTF-8
-            #               mime=image_mime,  # 'image/jpeg' ou 'image/png'
-            #               type=3,  # 3 = Cover (front)
-            #               desc=u'Cover',
-            #               data=image_data
-            #           )
-
-        #           audio.add(apic)
-
         audio.save()
 
 
@@ -661,34 +575,6 @@ def create_ImageInList_from_web(Images, query, number_of_image):
         except:
             pass
 
-
-def create_ImageInList_from_apple_music(images, artist, track):
-    from apple_music import get_song_artworks
-    try:
-        urls = get_song_artworks(artist, track, 5)
-    except:
-        return
-
-    for url in urls:
-        try:
-            download_and_handle_image(url, images)
-        except:
-            pass
-
-def create_ImageInList_from_deezer(images, artist, track):
-    from deezer import get_deezer_artworks
-    try:
-        urls = get_deezer_artworks(artist, track, 5)
-    except:
-        return
-
-    for url in urls:
-        try:
-            download_and_handle_image(url, images)
-        except:
-            pass
-
-
 def create_ImageInList_from_Url(Images, url):
     try:
         download_and_handle_image(url, Images)
@@ -697,12 +583,6 @@ def create_ImageInList_from_Url(Images, url):
 
 
 def get_object_from_list(item, object_list):
-    if item is not None:
-        for Objects in object_list:
-            if item.text() == Objects.get_name_in_list():
-                return Objects
-
-def set_Musique(item, object_list):
     if item is not None:
         for Objects in object_list:
             if item.text() == Objects.get_name_in_list():
@@ -838,15 +718,8 @@ class DiscogsListWindow(QWidget):
             self.groupeImageViewer.photoViewer = photoViewer()
 
             gridImageViewer = QGridLayout()
-
             gridImageViewer.addWidget(self.groupeImageViewer.photoViewer.Image, 0, 0, 10, 3)
             gridImageViewer.addWidget(self.groupeImageViewer.photoViewer.labelPictureInformation, 10, 0, 1, 3)
-
-            # Utiliser des stretch factors pour équilibrer l'espace entre les colonnes
-            #gridImageViewer.setColumnStretch(0, 1)
-            #gridImageViewer.setColumnStretch(1, 1)
-            #gridImageViewer.setColumnStretch(2, 2)  # Donne plus d'espace à la colonne 2
-
             self.groupeImageViewer.setLayout(gridImageViewer)
 
         # Référence à la fenêtre principale
@@ -903,16 +776,10 @@ class MainWindow(QDialog):
                 if files[-3:] == 'flac' or files[-3:] == 'FLAC':
                     musique_file = FlacFile(files, path)
                 musique_file.extract_tag()
-                musique_file.extract_image()
                 self.groupeListPistes.Pistes.append(musique_file)
                 self.groupeListPistes.ListPistes.addItem(files)
 
-    def clickMethodSearchOneSongImage(self):
-        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
-        song_info.get_image_from_web()
-        self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
-
-    def clickMethodSearchAllImage(self):
+    def clickMethodSearchAllsongInfo(self):
         from PyQt5.QtWidgets import QProgressBar
         # Initialisation de la barre de progression
         count = self.groupeListPistes.ListPistes.count()
@@ -930,20 +797,6 @@ class MainWindow(QDialog):
             self.progress_bar.setValue(index + 1)
             QApplication.processEvents()  # Permet de rafraîchir l'interface graphique
 
-        #self.progress_bar.close()
-
-
-
-        #song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
-        #self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
-
-    def clickMethodAddOneSongImageFromUrl(self):
-        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(),
-                                         self.groupeListPistes.Pistes)
-        url = self.groupeImageViewer.zoneTextUrlAjoutManuel.text()
-        song_info.get_image_from_url(url)
-        self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
-
     def fill_groupeediteurTag_from_song_info(self, groupeediteurTag, song_info):
         groupeediteurTag.zoneTextFileName.setText(song_info.old_file_name)
         groupeediteurTag.zoneTextTitre.setText(song_info.Titre)
@@ -960,52 +813,24 @@ class MainWindow(QDialog):
         groupeediteurTag.zoneTextAlbumArtist.setText(song_info.ArtisteAlbum)
 
         groupeediteurTag.photoViewer.update_from_pixmap(song_info.Image)
-         # self.ArtisteAlbum = None
-
-    def fill_groupeImageViewer_from_song_info(self, groupeImageViewer, song_info):
-        groupeImageViewer.ListImage.clear()
-        for ImageToAppendInThelist in song_info.Images:
-            nametoplot = ImageToAppendInThelist.get_name_in_list()
-            groupeImageViewer.ListImage.addItem(nametoplot)
-        song_info.ImageViewer_restore_selection(groupeImageViewer)
 
     def clickMethodListePiste(self):
 
         if self.groupeListPistes.previousPiste is not None:
             # Sauvegarde de ce qui a été rempli dans l'editeur de tag
             song_info = get_object_from_list(self.groupeListPistes.previousPiste, self.groupeListPistes.Pistes)
-            song_info.set_data_from_groupeediteurTag(self.groupeediteurTag, self.groupeImageViewer)
+            song_info.set_data_from_groupeediteurTag(self.groupeediteurTag)
 
         self.groupeListPistes.previousPiste = self.groupeListPistes.ListPistes.currentItem()
 
         #ecriture des infos du nouveau selectionne
         song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
         self.fill_groupeediteurTag_from_song_info(self.groupeediteurTag, song_info)
-        self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
-        self.clickMethodListeImage()
-
-    def clickMethodListeImage(self):
-        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
-        image_to_display = get_object_from_list(self.groupeImageViewer.ListImage.currentItem(), song_info.Images)
-        if image_to_display is None:
-            self.groupeImageViewer.photoViewer.fill_with_blank()
-            self.groupeImageViewer.labelPictureInformation.setText("-")
-        else:
-            pixmap = image_to_display.get_pixmap()
-            if pixmap is None:
-                self.groupeImageViewer.photoViewer.fill_with_blank()
-                self.groupeImageViewer.labelPictureInformation.setText("-")
-            else:
-                aspectRatioMode = Qt.KeepAspectRatio
-                pixmap_resized = pixmap.scaled(300, 300, aspectRatioMode)
-                self.groupeImageViewer.photoViewer.setPixmap(pixmap_resized)
-                self.groupeImageViewer.labelPictureInformation.setText(
-                    "" + str(pixmap.height()) + "x" + str(pixmap.width()))
 
     def clickMethodValider(self):
         if self.groupeListPistes.ListPistes.currentItem() is not None:
             song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
-            song_info.set_data_from_groupeediteurTag(self.groupeediteurTag, self.groupeImageViewer)
+            song_info.set_data_from_groupeediteurTag(self.groupeediteurTag)
         for index in range(self.groupeListPistes.ListPistes.count()):
             item = self.groupeListPistes.ListPistes.item(index)
             song_info = get_object_from_list(item, self.groupeListPistes.Pistes)
@@ -1022,12 +847,6 @@ class MainWindow(QDialog):
 
     def clickMethodRemplissageAllArtists(self):
         chaine = self.groupeediteurTag.zoneTextFileName.text()
-        #song_info_from_extract = extraire_informations(chaine)
-
-        #self.groupeediteurTag.zoneTextTitre.setText(song_info_from_extract["titre"])
-        #self.groupeediteurTag.zoneTextArtistAsDisplay.setText(song_info_from_extract["artiste"])
-        #self.groupeediteurTag.zoneTextArtistFeaturing.setText(song_info_from_extract["artisteFeat"])
-        #self.groupeediteurTag.zoneTextArtistAll.setText(song_info_from_extract["artisteAll"])
 
     def open_new_window(self):
         # Créer et afficher la nouvelle fenêtre
@@ -1062,46 +881,12 @@ class MainWindow(QDialog):
         grid.addWidget(self.groupeListPistes.ListPistes, 0, 0)
         self.groupeListPistes.setLayout(grid)
 
-    def createImageViewer(self):
-        # self.groupeediteurTag.createImageViewer()
-        self.groupeImageViewer = QGroupBox("Cover")
-        self.groupeImageViewer.Images = []
-        self.groupeImageViewer.ListImage = QListWidget(self)
-        self.groupeImageViewer.ListImage.selectionModel().selectionChanged.connect(self.clickMethodListeImage)
-        self.groupeImageViewer.selectedIndices = []
-        boutonValider = QPushButton('Rech. Auto', self)
-        boutonValider.clicked.connect(self.clickMethodSearchOneSongImage)
-
-        boutonValider3 = QPushButton('Ajout Via Url', self)
-        boutonValider3.clicked.connect(self.clickMethodAddOneSongImageFromUrl)
-        self.groupeImageViewer.photoViewer = ImageLabel()
-        self.groupeImageViewer.labelPictureInformation = QLabel("-")
-        self.groupeImageViewer.labelPictureInformation.setAlignment(Qt.AlignCenter)
-        gridImageViewer = QGridLayout()
-        gridImageViewer.addWidget(self.groupeImageViewer.ListImage, 0, 0, 9, 2)
-        gridImageViewer.addWidget(boutonValider, 9, 0, 1, 1)
-
-
-        self.groupeImageViewer.zoneTextUrlAjoutManuel = QLineEdit(self)
-        gridImageViewer.addWidget(self.groupeImageViewer.zoneTextUrlAjoutManuel, 10, 0, 1, 1)
-        gridImageViewer.addWidget(boutonValider3, 10, 1, 1, 1)
-
-        gridImageViewer.addWidget(self.groupeImageViewer.photoViewer, 0, 2, 10, 3)
-        gridImageViewer.addWidget(self.groupeImageViewer.labelPictureInformation, 10, 2, 1, 3)
-
-        # Utiliser des stretch factors pour équilibrer l'espace entre les colonnes
-        gridImageViewer.setColumnStretch(0, 1)
-        gridImageViewer.setColumnStretch(1, 1)
-        gridImageViewer.setColumnStretch(2, 2)  # Donne plus d'espace à la colonne 2
-
-        self.groupeImageViewer.setLayout(gridImageViewer)
-
     def create_groupe_action(self):
         self.groupeAction = QGroupBox("Action")
 
         #Bouton pour rechercher les information
         bouton_valider2 = QPushButton('Rech. Auto. tt Musique', self)
-        bouton_valider2.clicked.connect(self.clickMethodSearchAllImage)
+        bouton_valider2.clicked.connect(self.clickMethodSearchAllsongInfo)
 
         grid_groupe_action = QGridLayout()
         grid_groupe_action.addWidget(bouton_valider2, 0, 0)
@@ -1252,7 +1037,6 @@ class MainWindow(QDialog):
         self.createParcourir()
         self.createListePistes()
         self.create_groupe_action()
-        self.createImageViewer()
         self.createEditeurTag()
         self.createValider()
 
@@ -1262,7 +1046,6 @@ class MainWindow(QDialog):
         main_layout.addWidget(self.groupeListPistes, 1, 0, 4, 1)
         main_layout.addWidget(self.groupeAction, 0, 1, 1, 1)
 
-        #main_layout.addWidget(self.groupeImageViewer, 0, 2, 3, 5)
         main_layout.addWidget(self.groupeediteurTag, 1, 1, 3, 1)
         main_layout.addWidget(self.groupeValider, 4, 1, 1, 1)
 
