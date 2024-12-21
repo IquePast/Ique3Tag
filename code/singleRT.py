@@ -295,6 +295,8 @@ class MusiqueFile:
         self.Images = [] #a virer apres?
         self.Image = None # image qu'on a choisi
 
+        self.tracks_info = []
+
         self.selectedIndices = []
         noneImage = ImageInList("None")
         self.Images.append(noneImage)
@@ -335,6 +337,41 @@ class MusiqueFile:
 
         create_ImageInList_from_apple_music(self.Images, artiste, titre)
         create_ImageInList_from_deezer(self.Images, artiste, titre)
+
+    def get_tracks_info_from_web(self):
+        purged_name = self.old_file_name
+        purged_name = purged_name.replace(purged_name[purged_name.find('myfreemp3'):purged_name.find('myfreemp3') + len('myfreemp3') + 4], '')
+        purged_name = purged_name.replace('.mp3', '').replace('.flac', '')
+        #create_ImageInList_from_web(self.Images, purged_name, 10)
+        #create_ImageInList_from_web(self.Images, 'soundcloud' + purged_name, 4)
+        #create_ImageInList_from_web(self.Images, 'beatport' + purged_name, 4)
+        song_info_from_extract = extraire_informations(purged_name)
+        if self.ArtisteDisplay == '':
+            artiste = song_info_from_extract["artiste"]
+        else:
+            artiste = self.ArtisteDisplay
+
+        if self.ArtisteDisplay == '':
+            titre = song_info_from_extract["titre"]
+        else:
+            titre = self.Titre
+
+        #create_ImageInList_from_apple_music(self.Images, artiste, titre)
+        #create_ImageInList_from_deezer(self.Images, artiste, titre)
+
+        self.tracks_info.extend(self.get_tracks_info_from_applemusic_query(artiste, titre))
+        self.tracks_info.extend(self.get_tracks_info_from_discogs_query(artiste, titre))
+
+    def get_tracks_info_from_discogs_query(self, artiste, titre):
+        from discogs import get_discogs_track_details
+        searched_song = artiste + " - " + titre
+        tracks_info = get_discogs_track_details(searched_song, 5)
+        return tracks_info
+
+    def get_tracks_info_from_applemusic_query(self, artiste, titre):
+        from apple_music import get_itunes_track_details
+        tracks_info = get_itunes_track_details(artiste, titre, 5)
+        return tracks_info
 
 
     def get_image_from_url(self, url):
@@ -733,12 +770,9 @@ class DiscogsListWindow(QWidget):
     def fill_discogs_table_from_internet_query(self):
         self.ListDiscogs.tableWidget.clearContents()
         self.ListDiscogs.tableWidget.last_filled_row = -1
-        Artists = self.main_window.groupeediteurTag.zoneTextArtistAsDisplay.text()
-        Titre = self.main_window.groupeediteurTag.zoneTextTitre.text()
-        searched_song = Artists + " - " + Titre
-
-        self.fill_discogs_table_from_discogs_query(searched_song)
-        self.fill_discogs_table_from_applemusic_query(Artists, Titre)
+        if self.song_info is not None:
+            for track_info in self.song_info.tracks_info:
+                self.setListDiscogsTableur(track_info)
 
     def write_to_main_window(self):
         # Dictionnaire associant les colonnes aux champs de groupeediteurTag
@@ -775,7 +809,7 @@ class DiscogsListWindow(QWidget):
 
 
 
-    def __init__(self, main_window):
+    def __init__(self, main_window, song_info):
         super().__init__()
 
         def createTableurDiscogs(self):
@@ -817,6 +851,7 @@ class DiscogsListWindow(QWidget):
 
         # Référence à la fenêtre principale
         self.main_window = main_window
+        self.song_info = song_info
 
         # Configuration de la nouvelle fenêtre
         self.setWindowTitle("Remplissage via Discogs")
@@ -849,6 +884,9 @@ class DiscogsListWindow(QWidget):
         grid.setColumnStretch(11, 1)  # Un tiers pour la partie droite
         self.setLayout(grid)
 
+        #remplissage
+        self.fill_discogs_table_from_internet_query()
+
 class MainWindow(QDialog):
     def clickMethodOpenBrowser(self):
         # folderpath = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder', r'\\Freebox_server\DDext_4To\Musique')
@@ -875,13 +913,29 @@ class MainWindow(QDialog):
         self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
 
     def clickMethodSearchAllImage(self):
-        for index in range(self.groupeListPistes.ListPistes.count()):
+        from PyQt5.QtWidgets import QProgressBar
+        # Initialisation de la barre de progression
+        count = self.groupeListPistes.ListPistes.count()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(count)
+        self.progress_bar.setValue(0)
+        self.progress_bar.show()
+
+        for index in range(count):
             item = self.groupeListPistes.ListPistes.item(index)
             song_info = get_object_from_list(item, self.groupeListPistes.Pistes)
-            song_info.get_image_from_web()
+            song_info.get_tracks_info_from_web()
 
-        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
-        self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
+            # Mise à jour de la barre de progression
+            self.progress_bar.setValue(index + 1)
+            QApplication.processEvents()  # Permet de rafraîchir l'interface graphique
+
+        #self.progress_bar.close()
+
+
+
+        #song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
+        #self.fill_groupeImageViewer_from_song_info(self.groupeImageViewer, song_info)
 
     def clickMethodAddOneSongImageFromUrl(self):
         song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(),
@@ -966,9 +1020,19 @@ class MainWindow(QDialog):
         self.groupeediteurTag.zoneTextArtistFeaturing.setText(song_info_from_extract["artisteFeat"])
         self.groupeediteurTag.zoneTextArtistAll.setText(song_info_from_extract["artisteAll"])
 
+    def clickMethodRemplissageAllArtists(self):
+        chaine = self.groupeediteurTag.zoneTextFileName.text()
+        #song_info_from_extract = extraire_informations(chaine)
+
+        #self.groupeediteurTag.zoneTextTitre.setText(song_info_from_extract["titre"])
+        #self.groupeediteurTag.zoneTextArtistAsDisplay.setText(song_info_from_extract["artiste"])
+        #self.groupeediteurTag.zoneTextArtistFeaturing.setText(song_info_from_extract["artisteFeat"])
+        #self.groupeediteurTag.zoneTextArtistAll.setText(song_info_from_extract["artisteAll"])
+
     def open_new_window(self):
         # Créer et afficher la nouvelle fenêtre
-        self.discogs_window = DiscogsListWindow(self)
+        song_info = get_object_from_list(self.groupeListPistes.ListPistes.currentItem(), self.groupeListPistes.Pistes)
+        self.discogs_window = DiscogsListWindow(self, song_info)
         self.discogs_window.show()
 
     def createParcourir(self):
@@ -1041,6 +1105,19 @@ class MainWindow(QDialog):
 
         grid_groupe_action = QGridLayout()
         grid_groupe_action.addWidget(bouton_valider2, 0, 0)
+
+        # Barre de progression
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)  # Affiche le pourcentage
+
+        # Layout
+        grid_groupe_action = QGridLayout()
+        grid_groupe_action.addWidget(bouton_valider2, 0, 0)  # Bouton à gauche
+        grid_groupe_action.addWidget(self.progress_bar, 0, 1)  # Barre à droite
+
         self.groupeAction.setLayout(grid_groupe_action)
 
     def createEditeurTag(self):
@@ -1125,13 +1202,22 @@ class MainWindow(QDialog):
         grid.addWidget(self.groupeediteurTag.photoViewer.Image, 0, 6, 10, 1)
         grid.addWidget(self.groupeediteurTag.photoViewer.labelPictureInformation, 10, 6, 1, 1)
 
-        bouton_AutoAnalyse = QPushButton('Auto-analyse', self)
-        bouton_AutoAnalyse.clicked.connect(self.clickMethodAutoAnalyse)
-        grid.addWidget(bouton_AutoAnalyse, line, 0)
+        line = line + 1
+        #Bouton action
+        actions = [
+            ('Auto-analyse', "Extrait les informations à partir du titre", self.clickMethodAutoAnalyse),
+            ('Internet BDD', "Remplissage à partir des BDD internet", self.open_new_window),
+            ('All Artist', "Remplit le champ all artiste à partir des autres", self.clickMethodRemplissageAllArtists)
+        ]
 
-        bouton_Discogs = QPushButton('Discogs', self)
-        bouton_Discogs.clicked.connect(self.open_new_window)
-        grid.addWidget(bouton_Discogs, line, 1)
+        for text, tooltip, callback in actions:
+            bouton = QPushButton(text, self)
+            bouton.clicked.connect(callback)
+            label = QLabel(tooltip)
+            grid.addWidget(bouton, line, 0)
+            grid.addWidget(label, line, 1)
+            line += 1
+
 
         grid.setColumnStretch(0, 4)
         grid.setColumnStretch(1, 6)
@@ -1161,7 +1247,7 @@ class MainWindow(QDialog):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
 
-        self.setMinimumSize(QSize(1350, 900))
+        self.setMinimumSize(QSize(1350, 700))
 
         self.createParcourir()
         self.createListePistes()
@@ -1172,13 +1258,16 @@ class MainWindow(QDialog):
 
 
         main_layout = QGridLayout()
-        main_layout.addWidget(self.groupeParcourir, 0, 0, 1, 2)
-        main_layout.addWidget(self.groupeListPistes, 1, 0, 5, 2)
-        main_layout.addWidget(self.groupeAction, 6, 0, 1, 2)
+        main_layout.addWidget(self.groupeParcourir, 0, 0, 1, 1)
+        main_layout.addWidget(self.groupeListPistes, 1, 0, 4, 1)
+        main_layout.addWidget(self.groupeAction, 0, 1, 1, 1)
 
-        main_layout.addWidget(self.groupeImageViewer, 0, 2, 3, 5)
-        main_layout.addWidget(self.groupeediteurTag, 3, 2, 3, 5)
-        main_layout.addWidget(self.groupeValider, 6, 2, 1, 5)
+        #main_layout.addWidget(self.groupeImageViewer, 0, 2, 3, 5)
+        main_layout.addWidget(self.groupeediteurTag, 1, 1, 3, 1)
+        main_layout.addWidget(self.groupeValider, 4, 1, 1, 1)
+
+        main_layout.setColumnStretch(0, 1)
+        main_layout.setColumnStretch(1, 4)
 
         self.setLayout(main_layout)
 
