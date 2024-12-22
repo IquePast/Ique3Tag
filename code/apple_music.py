@@ -2,6 +2,45 @@ import requests
 from datetime import datetime
 from IqueMusicTag import IqueMusicTag
 
+
+def map_apple_to_discogs_genre(apple_genre):
+    """
+    Mappe un genre Apple Music vers un genre Discogs.
+
+    Args:
+        apple_genre (str): Le genre provenant d'Apple Music.
+
+    Returns:
+        str: Le genre correspondant sur Discogs.
+    """
+    genre_mapping = {
+        'Hip-Hop/Rap': 'Hip Hop',
+        'Rock': 'Rock',
+        'Pop': 'Pop',
+        'Alternative': 'Rock',
+        'R&B/Soul': 'Funk / Soul',
+        'Electronique': 'Electronic',
+        'Hard Rock': 'Rock',
+        'Jazz': 'Jazz',
+        'Motown': 'Funk / Soul',
+        'Punk': 'Rock',
+        'Chanson': 'Folk, World, & Country',
+        'Country': 'Folk, World, & Country',
+        'Latin': 'Latin',
+        'Metal': 'Rock',
+        'Reggae Roots': 'Reggae',
+        'Blues': 'Blues',
+        'Classique': 'Classical',
+        'Indie': 'Rock',
+        'Dance': 'Electronic',
+        'Folk': 'Folk, World, & Country',
+        'Soundtrack': 'Stage & Screen',
+        'Ambient': 'Electronic',
+        'World': 'Folk, World, & Country'
+    }
+
+    return genre_mapping.get(apple_genre, None)
+
 def get_apple_music_artworks(artist, album, num_results=1):
     """
     Récupère plusieurs URLs d'artworks associés à un artiste et un album.
@@ -128,18 +167,28 @@ def get_itunes_track_details(artist, track, num_results=1):
         # Extraire les détails pour chaque piste
         tags = []
         for track_info in data["results"]:
+            track_name = track_info.get("trackName", "").lower()
+            # Extraction des crédits supplémentaires
+            contributors = []
 
-            # Note : L'API ne fournit pas directement les artistes en featuring ou remix
-            # Ces informations peuvent être présentes dans les noms des pistes (e.g., "feat." ou "remix")
-            # On peut les extraire avec un traitement supplémentaire
-            if "feat." in track_info.get("trackName", "").lower():
-                featuring = track_info.get("trackName", "").lower().split("feat.")[1].split(")")[0].strip().title()
+            if "feat." in track_name:
+                featuring = track_name.split("feat.")[1].split(")")[0].strip().title()
             else:
                 featuring = ""
-            if "remix" in track_info.get("trackName", "").lower():
-                remixer = track_info.get("trackName", "").lower().split("remix")[0].strip()
+            if "remix" in track_name:
+                remixer = track_name.split("remix")[0].strip()
             else:
                 remixer = ""
+
+            contributors.append(track_info.get("artistName", ""))
+            if "collectionArtistName" in track_info:
+                contributors.append(track_info.get("collectionArtistName", ""))
+            # Ajouter les featuring et remixeurs aux contributeurs
+            contributors.extend(featuring)
+            contributors.extend(remixer)
+
+            # Enlever les doublons
+            contributors = list(set(filter(None, contributors)))
 
             release_date = track_info.get("releaseDate")
             annee = datetime.strptime(release_date, "%Y-%m-%dT%H:%M:%SZ").year if release_date else None
@@ -150,10 +199,10 @@ def get_itunes_track_details(artist, track, num_results=1):
                 artiste_display=track_info.get("artistName", ""),
                 artiste_remix=remixer,
                 artiste_ft=featuring,
-                artiste_all="",
+                artiste_all=';'.join(contributors),
                 annee=annee,
-                style=None,
-                genre=track_info.get("primaryGenreName"),
+                style=track_info.get("primaryGenreName"),
+                genre=map_apple_to_discogs_genre(track_info.get("primaryGenreName")),
                 disk=track_info.get("discNumber"),
                 track=track_info.get("trackNumber"),
                 album=track_info.get("collectionName"),

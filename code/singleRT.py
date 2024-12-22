@@ -207,6 +207,7 @@ class photoViewer:
         self.pixmap_original = None
         self.labelPictureInformation = QLabel("-")
         self.labelPictureInformation.setAlignment(Qt.AlignCenter)
+        
 
     def update_from_pixmap(self, pixmap):
         """Met à jour le viewer avec le pixmap téléchargé."""
@@ -324,6 +325,7 @@ class MusiqueFile:
 
         self.tracks_info.extend(self.get_tracks_info_from_discogs_query(artiste, titre))
         self.tracks_info.extend(self.get_tracks_info_from_applemusic_query(artiste, titre))
+        self.tracks_info.extend(self.get_tracks_info_from_deezer_query(artiste, titre))
 
     def get_tracks_info_from_discogs_query(self, artiste, titre):
         from discogs import get_discogs_track_details
@@ -334,6 +336,11 @@ class MusiqueFile:
     def get_tracks_info_from_applemusic_query(self, artiste, titre):
         from apple_music import get_itunes_track_details
         tracks_info = get_itunes_track_details(artiste, titre, 5)
+        return tracks_info
+
+    def get_tracks_info_from_deezer_query(self, artiste, titre):
+        from deezer import get_deezer_track_details
+        tracks_info = get_deezer_track_details(artiste, titre, 3)
         return tracks_info
 
     def get_image_from_url(self, url):
@@ -602,6 +609,98 @@ class DiscogsListWindow(QWidget):
     COL_DISCOGS_ALBUM_ARTIST = 9
     COL_ARTWORK_URL = 10
 
+    def __init__(self, main_window, song_info):
+        super().__init__()
+
+        def createTableurDiscogs(self):
+            self.ListDiscogs = QWidget()
+            self.ListDiscogs.tableWidget = MyTableWidget(100, 11)
+            self.ListDiscogs.tableWidget.setRowCount(100)
+            self.ListDiscogs.tableWidget.setColumnCount(11)
+            self.ListDiscogs.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            self.ListDiscogs.tableWidget.setHorizontalHeaderLabels(
+                ['Titre', 'Artiste As Display', 'Artiste Featuring', 'Artiste Remix', 'Artiste All', 'Genre', 'Style', 'Annee', 'Album', 'Artist Album', 'Image Url'])
+            # Définir des largeurs spécifiques pour les colonnes
+            column_widths = [100, 100, 80, 80, 150, 100, 100, 80, 100, 100, 250]  # Largeurs personnalisées
+            for col, width in enumerate(column_widths):
+                self.ListDiscogs.tableWidget.setColumnWidth(col, width)
+
+            tab1hbox = QHBoxLayout()
+            tab1hbox.setContentsMargins(5, 5, 5, 5)
+            tab1hbox.addWidget(self.ListDiscogs.tableWidget)
+            #
+            item = QTableWidgetItem()
+            self.ListDiscogs.tableWidget.setItem(0, 1, item)
+            self.ListDiscogs.setLayout(tab1hbox)
+
+        def createImageViewer(self):
+            self.groupeImageViewer = QGroupBox("Cover")
+            self.groupeImageViewer.photoViewer = photoViewer()
+
+            gridImageViewer = QGridLayout()
+            gridImageViewer.addWidget(self.groupeImageViewer.photoViewer.Image, 0, 0, 10, 3)
+            gridImageViewer.addWidget(self.groupeImageViewer.photoViewer.labelPictureInformation, 10, 0, 1, 3)
+            self.groupeImageViewer.setLayout(gridImageViewer)
+
+        def createRechercheManuel(self):
+            self.groupeRecherche = QGroupBox("Recherche manuelle")
+            # Creation Bouton search
+            labelArtist = QLabel("Artist")
+            self.groupeRecherche.zone_texte_Artiste = QLineEdit(self)
+            labelTitre = QLabel("Titre")
+            self.groupeRecherche.zone_texte_Titre = QLineEdit(self)
+            discogs_search = QPushButton("Recherche", self)
+            discogs_search.clicked.connect(self.search_track_info_from_internet_query_from_zone_texte_recherche)
+
+            gridRecherche = QGridLayout()
+            gridRecherche.addWidget(labelArtist, 0, 0)
+            gridRecherche.addWidget(self.groupeRecherche.zone_texte_Artiste, 0, 1)
+            gridRecherche.addWidget(labelTitre, 0, 2)
+            gridRecherche.addWidget(self.groupeRecherche.zone_texte_Titre, 0, 3)
+            gridRecherche.addWidget(discogs_search, 0, 4)
+            self.groupeRecherche.setLayout(gridRecherche)
+
+        # Référence à la fenêtre principale
+        self.main_window = main_window
+        self.song_info = song_info
+
+        # Configuration de la nouvelle fenêtre
+        self.setWindowTitle("Remplissage via Discogs")
+        self.setMinimumSize(1700, 500)
+
+        #Creation de la zone de recherche manuelle
+        createRechercheManuel(self)
+        #Creation du tableaur discogs
+        createTableurDiscogs(self)
+        # Creation Image viewer
+        createImageViewer(self)
+
+        self.ListDiscogs.tableWidget.setPhotoViewer(self.groupeImageViewer.photoViewer)
+
+        # Creation Bouton Appliquer
+        discogs_valider = QPushButton("Appliquer", self)
+        discogs_valider.clicked.connect(self.write_to_main_window)  # Connecter le bouton à la méthode d'écriture
+
+        # Layout pour le bouton dans la nouvelle fenêtre
+        grid = QGridLayout()
+        grid.addWidget(self.groupeRecherche, 0, 0)
+        grid.addWidget(self.ListDiscogs, 1, 0, 5, 10)
+        grid.addWidget(discogs_valider, 6, 0)
+        grid.addWidget(self.groupeImageViewer, 0, 11, 7, 1)  # Étendre sur toutes les lignes (1 colonne à droite)
+
+        # Définition des ratios d'étirement des colonnes
+        grid.setColumnStretch(0, 3)  # Deux tiers pour la partie gauche
+        grid.setColumnStretch(11, 1)  # Un tiers pour la partie droite
+        self.setLayout(grid)
+
+        #remplissage
+        if self.song_info is not None:
+            song_info_from_extract = extraire_informations(self.song_info.old_file_name)
+            self.groupeRecherche.zone_texte_Artiste.setText(song_info_from_extract["artiste"])
+            self.groupeRecherche.zone_texte_Titre.setText(song_info_from_extract["titre"])
+
+            self.fill_discogs_table_from_internet_query()
+
     def setListDiscogsTableur(self, track_info):
         """
         Remplit une ligne spécifique avec les données fournies dans le dictionnaire TrackInfo.
@@ -654,6 +753,20 @@ class DiscogsListWindow(QWidget):
             for track_info in self.song_info.tracks_info:
                 self.setListDiscogsTableur(track_info)
 
+    def search_track_info_from_internet_query_from_zone_texte_recherche(self):
+        artiste = self.groupeRecherche.zone_texte_Artiste.text()
+        titre = self.groupeRecherche.zone_texte_Titre.text()
+        if artiste == '' or titre == '' or self.song_info is None:
+            return
+
+        self.song_info.tracks_info.extend(self.song_info.get_tracks_info_from_discogs_query(artiste, titre))
+        self.song_info.tracks_info.extend(self.song_info.get_tracks_info_from_applemusic_query(artiste, titre))
+        self.ListDiscogs.tableWidget.clearContents()
+        self.ListDiscogs.tableWidget.last_filled_row = -1
+        if self.song_info is not None:
+            for track_info in self.song_info.tracks_info:
+                self.setListDiscogsTableur(track_info)
+
     def write_to_main_window(self):
         # Dictionnaire associant les colonnes aux champs de groupeediteurTag
         column_to_field = {
@@ -686,79 +799,6 @@ class DiscogsListWindow(QWidget):
                     else:
                         pixmap = create_pixmap_from_url(cell_value)
                         field.update_from_pixmap(pixmap)
-
-
-
-    def __init__(self, main_window, song_info):
-        super().__init__()
-
-        def createTableurDiscogs(self):
-            self.ListDiscogs = QWidget()
-            self.ListDiscogs.tableWidget = MyTableWidget(100, 11)
-            self.ListDiscogs.tableWidget.setRowCount(100)
-            self.ListDiscogs.tableWidget.setColumnCount(11)
-            self.ListDiscogs.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            self.ListDiscogs.tableWidget.setHorizontalHeaderLabels(
-                ['Titre', 'Artiste As Display', 'Artiste Featuring', 'Artiste Remix', 'Artiste All', 'Genre', 'Style', 'Annee', 'Album', 'Artist Album', 'Image Url'])
-            # Définir des largeurs spécifiques pour les colonnes
-            column_widths = [100, 100, 80, 80, 150, 100, 100, 80, 100, 100, 250]  # Largeurs personnalisées
-            for col, width in enumerate(column_widths):
-                self.ListDiscogs.tableWidget.setColumnWidth(col, width)
-
-            tab1hbox = QHBoxLayout()
-            tab1hbox.setContentsMargins(5, 5, 5, 5)
-            tab1hbox.addWidget(self.ListDiscogs.tableWidget)
-            #
-            item = QTableWidgetItem()
-            self.ListDiscogs.tableWidget.setItem(0, 1, item)
-            self.ListDiscogs.setLayout(tab1hbox)
-
-        def createImageViewer(self):
-            self.groupeImageViewer = QGroupBox("Cover")
-            self.groupeImageViewer.photoViewer = photoViewer()
-
-            gridImageViewer = QGridLayout()
-            gridImageViewer.addWidget(self.groupeImageViewer.photoViewer.Image, 0, 0, 10, 3)
-            gridImageViewer.addWidget(self.groupeImageViewer.photoViewer.labelPictureInformation, 10, 0, 1, 3)
-            self.groupeImageViewer.setLayout(gridImageViewer)
-
-        # Référence à la fenêtre principale
-        self.main_window = main_window
-        self.song_info = song_info
-
-        # Configuration de la nouvelle fenêtre
-        self.setWindowTitle("Remplissage via Discogs")
-        self.setMinimumSize(1700, 500)
-
-        # Creation Bouton search
-        discogs_search = QPushButton("Recherche", self)
-        discogs_search.clicked.connect(self.fill_discogs_table_from_internet_query)
-
-        #Creation du tableaur discogs
-        createTableurDiscogs(self)
-        # Creation Image viewer
-        createImageViewer(self)
-
-        self.ListDiscogs.tableWidget.setPhotoViewer(self.groupeImageViewer.photoViewer)
-
-        # Creation Bouton Hello World
-        discogs_valider = QPushButton("Hello World", self)
-        discogs_valider.clicked.connect(self.write_to_main_window)  # Connecter le bouton à la méthode d'écriture
-
-        # Layout pour le bouton dans la nouvelle fenêtre
-        grid = QGridLayout()
-        grid.addWidget(discogs_search, 0, 0)
-        grid.addWidget(self.ListDiscogs, 1, 0, 5, 10)
-        grid.addWidget(discogs_valider, 6, 0)
-        grid.addWidget(self.groupeImageViewer, 0, 11, 7, 1)  # Étendre sur toutes les lignes (1 colonne à droite)
-
-        # Définition des ratios d'étirement des colonnes
-        grid.setColumnStretch(0, 3)  # Deux tiers pour la partie gauche
-        grid.setColumnStretch(11, 1)  # Un tiers pour la partie droite
-        self.setLayout(grid)
-
-        #remplissage
-        self.fill_discogs_table_from_internet_query()
 
 class MainWindow(QDialog):
     def clickMethodOpenBrowser(self):
