@@ -354,9 +354,16 @@ class MusiqueFile:
         self.Image = None        # image qu'on a choisi
         self.tracks_info = []    # data trouvé sur internet
 
-
     def get_name_in_list(self):
         return self.old_file_name
+
+    def extract_image(self):
+        for tag in self.metadata.tags.values():
+            if tag.FrameID == 'APIC':
+                pixmap = QPixmap()
+                pixmap.loadFromData(tag.data)
+                self.Image = pixmap
+                break
 
     def get_image_from_web(self):
         purged_name = self.old_file_name
@@ -451,6 +458,7 @@ class FlacFile(MusiqueFile):
         self.Genre = extract_unitary(audio, 'genre')
         self.Style = extract_unitary(audio, 'style')
         self.Annee = extract_unitary(audio, 'date')
+        self.extract_image()
 
     def saveTag(self):
         from mutagen.flac import FLAC, Picture
@@ -518,6 +526,8 @@ class Mp3File(MusiqueFile):
                self.ArtisteRemix = tag.text[0]
             if tag.desc == 'Artist ft':
                 self.ArtisteFt = tag.text[0]
+
+        self.extract_image()
 
     def saveTag(self):
         audio = ID3(self.old_file_name_with_path)
