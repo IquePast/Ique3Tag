@@ -1,4 +1,5 @@
 import requests
+import re
 from datetime import datetime
 from IqueMusicTag import IqueMusicTag
 
@@ -40,6 +41,46 @@ def map_apple_to_discogs_genre(apple_genre):
     }
 
     return genre_mapping.get(apple_genre, None)
+
+
+def extract_feat_artists_and_title(title: str):
+    """
+    Extrait les artistes mentionnés après "feat." dans un titre et retourne le titre sans la partie "feat.".
+
+    Args:
+        title (str): Le titre de la chanson.
+
+    Returns:
+        tuple: Le titre nettoyé (str) et une liste des artistes mentionnés après "feat.".
+    """
+    match = re.search(r'(.*?)\s*\(feat\.\s*([^\)]+)\)', title, re.IGNORECASE)
+    if match:
+        cleaned_title = match.group(1).strip()
+        artists = [artist.strip() for artist in match.group(2).split('&')]
+        return cleaned_title, artists
+    else:
+        match = re.search(r'(.*?)\s*feat\.\s*([^\[\(]+)', title, re.IGNORECASE)
+        if match:
+            cleaned_title = match.group(1).strip()
+            artists = [artist.strip() for artist in match.group(2).split('&')]
+            return cleaned_title, artists
+
+    return title, []
+
+
+def extract_all_artists(artist_line: str):
+    """
+    Extrait tous les artistes d'une ligne formatée "Artiste : ...".
+
+    Args:
+        artist_line (str): La ligne contenant les artistes.
+
+    Returns:
+        list: Une liste des artistes extraits.
+    """
+    artists = [artist.strip() for artist in re.split(r'[,&;]', artist_line)]
+    return artists
+
 
 def get_apple_music_artworks(artist, album, num_results=1):
     """
@@ -167,12 +208,13 @@ def get_itunes_track_details(artist, track, num_results=1):
         # Extraire les détails pour chaque piste
         tags = []
         for track_info in data["results"]:
-            track_name = track_info.get("trackName", "").lower()
+            track_name = track_info.get("trackName", "")
             # Extraction des crédits supplémentaires
             contributors = []
 
             if "feat." in track_name:
-                featuring = track_name.split("feat.")[1].split(")")[0].strip().title()
+                track_name, featuring = extract_feat_artists_and_title(track_name)
+                #featuring = track_name.split("feat.")[1].split(")")[0].strip().title()
             else:
                 featuring = ""
             if "remix" in track_name:
@@ -180,7 +222,8 @@ def get_itunes_track_details(artist, track, num_results=1):
             else:
                 remixer = ""
 
-            contributors.append(track_info.get("artistName", ""))
+            main_artist = extract_all_artists(track_info.get("artistName", ""))
+            contributors.extend(main_artist)
             if "collectionArtistName" in track_info:
                 contributors.append(track_info.get("collectionArtistName", ""))
             # Ajouter les featuring et remixeurs aux contributeurs
@@ -195,10 +238,10 @@ def get_itunes_track_details(artist, track, num_results=1):
 
             tag = IqueMusicTag(
                 artiste=track_info.get("artistName", ""),
-                titre=track_info.get("trackName", ""),
+                titre=track_name,
                 artiste_display=track_info.get("artistName", ""),
-                artiste_remix=remixer,
-                artiste_ft=featuring,
+                artiste_remix=';'.join(remixer),
+                artiste_ft=';'.join(featuring),
                 artiste_all=';'.join(contributors),
                 annee=annee,
                 style=track_info.get("primaryGenreName"),
@@ -216,13 +259,13 @@ def get_itunes_track_details(artist, track, num_results=1):
         return tags
 
     except Exception as e:
-        return None
+        return []
 
 # Exemple d'utilisation
 if __name__ == '__main__':
-    artist_name = "Daft Punk"
-    track_name = "Get Lucky"
-    num_results = 15
+    artist_name = "Mollono.Bass Kuoko"
+    track_name = "No Silence"
+    num_results = 5
 
     track_details = get_itunes_track_details(artist_name, track_name, num_results)
 
@@ -238,6 +281,8 @@ if __name__ == '__main__':
             print(f"Année de sortie : {track.get('annee')}")
             print(f"Artwork : {track.get('images_path')}")
             print(f"featuring : {track.get('artiste_ft')}")
+            print(f"remix : {track.get('artiste_remix')}")
+            print(f"all : {track.get('artiste_all')}")
             print("-" * 40)
 
     # Exemple d'utilisation
@@ -246,7 +291,7 @@ if __name__ == '__main__':
     num_results = 5
 
     artworks = get_song_artworks(artist, track, num_results)
-    print(artworks)
+    #print(artworks)
 
     # Exemple d'utilisation
     artist = "Coldplay"
@@ -254,4 +299,4 @@ if __name__ == '__main__':
     num_results = 5
 
     artworks = get_apple_music_artworks(artist, album, num_results)
-    print(artworks)
+    #print(artworks)

@@ -1,12 +1,12 @@
 import sys
 
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import QDateTime, Qt, QTimer, QSize, QItemSelectionModel
-from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateTimeEdit,
+from PyQt5.QtCore import Qt, QSize, QItemSelectionModel
+from PyQt5.QtWidgets import (QApplication,
                              QDial, QDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-                             QProgressBar, QPushButton, QRadioButton, QScrollBar, QSizePolicy, QListWidget,
-                             QSlider, QSpinBox, QStyleFactory, QTableWidget, QTextEdit,
-                             QVBoxLayout, QWidget, QTableWidgetItem, QAbstractItemView, QCompleter)
+                             QProgressBar, QPushButton, QListWidget,
+                             QTableWidget, QWidget, QTableWidgetItem, QAbstractItemView, QCompleter, QMenu, QAction,
+                             )
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import QBuffer
 
@@ -42,7 +42,7 @@ def extract_unitary(audio, string):
     except:
         return ''
 
-def extraire_informations(chaine):
+def extraire_tag_from_filename(chaine):
     """
     Traite une chaîne de texte pour extraire les informations de l'artiste, du titre,
     et des artistes participants (featuring).
@@ -207,7 +207,11 @@ class photoViewer:
         self.pixmap_original = None
         self.labelPictureInformation = QLabel("-")
         self.labelPictureInformation.setAlignment(Qt.AlignCenter)
-        
+        self.labelPictureInformation.mousePressEvent = self.on_label_click  # Connecter l'événement de clic
+
+        # Connexion du menu contextuel
+        self.Image.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.Image.customContextMenuRequested.connect(self.show_context_menu)
 
     def update_from_pixmap(self, pixmap):
         """Met à jour le viewer avec le pixmap téléchargé."""
@@ -230,6 +234,60 @@ class photoViewer:
 
     def get_pixmap_original(self):
         return self.pixmap_original
+
+    def show_context_menu(self, pos):
+        """Affiche le menu contextuel pour supprimer ou ajouter une image."""
+        context_menu = QMenu(self.Image)
+
+        # Option pour supprimer l'image
+        remove_action = QAction("Remove Image", self.Image)
+        remove_action.triggered.connect(self.remove_image)
+        context_menu.addAction(remove_action)
+
+        # Option pour ajouter une image depuis le presse-papier
+        add_action = QAction("Add Image", self.Image)
+        add_action.triggered.connect(self.add_image_from_clipboard)
+        context_menu.addAction(add_action)
+
+        # Afficher le menu à la position du clic
+        context_menu.exec_(self.Image.mapToGlobal(pos))
+
+    def remove_image(self):
+        """Supprime l'image affichée."""
+        self.Image.fill_with_blank()
+        self.pixmap_original = None
+        self.labelPictureInformation.setText("-")
+
+    def add_image_from_clipboard(self):
+        """Ajoute une image depuis le presse-papier."""
+        clipboard = QApplication.clipboard()
+        pixmap = clipboard.pixmap()
+
+        if not pixmap.isNull():
+            self.update_from_pixmap(pixmap)
+        else:
+            # Si le presse-papier ne contient pas d'image, vérifier si le texte est une URL.
+            clipboard_text = clipboard.text()
+
+            # Vérifier si le texte du presse-papier est une URL valide
+            if clipboard_text.startswith("http://") or clipboard_text.startswith("https://"):
+                pixmap_from_url = self.create_pixmap_from_url(clipboard_text)
+                if not pixmap_from_url.isNull():
+                    self.update_from_pixmap(pixmap_from_url)
+
+    def on_label_click(self, event):
+        """Ouvre la fenêtre avec l'image originale lorsque le label est cliqué."""
+        if self.pixmap_original is not None:
+            self.open_image_window(self.pixmap_original)
+
+    def open_image_window(self, pixmap):
+        """Crée une fenêtre pour afficher l'image à sa taille originale."""
+        image_window = QDialog()
+        image_label = QLabel(image_window)
+        image_label.setPixmap(pixmap)
+        image_window.setWindowTitle("Image Originale")
+        image_window.setGeometry(100, 100, pixmap.width(), pixmap.height())
+        image_window.exec_()
 
 
 class ImageInList:
@@ -312,7 +370,7 @@ class MusiqueFile:
         purged_name = self.old_file_name
         purged_name = purged_name.replace(purged_name[purged_name.find('myfreemp3'):purged_name.find('myfreemp3') + len('myfreemp3') + 4], '')
         purged_name = purged_name.replace('.mp3', '').replace('.flac', '')
-        song_info_from_extract = extraire_informations(purged_name)
+        song_info_from_extract = extraire_tag_from_filename(purged_name)
         if self.ArtisteDisplay == '':
             artiste = song_info_from_extract["artiste"]
         else:
@@ -322,10 +380,14 @@ class MusiqueFile:
             titre = song_info_from_extract["titre"]
         else:
             titre = self.Titre
+        self.tracks_info.extend(self.get_tracks_info_from_all_bdd(artiste, titre))
 
-        self.tracks_info.extend(self.get_tracks_info_from_discogs_query(artiste, titre))
-        self.tracks_info.extend(self.get_tracks_info_from_applemusic_query(artiste, titre))
-        self.tracks_info.extend(self.get_tracks_info_from_deezer_query(artiste, titre))
+    def get_tracks_info_from_all_bdd(self, artiste, titre):
+        track_info = []
+        track_info.extend(self.get_tracks_info_from_discogs_query(artiste, titre))
+        track_info.extend(self.get_tracks_info_from_applemusic_query(artiste, titre))
+        track_info.extend(self.get_tracks_info_from_deezer_query(artiste, titre))
+        return track_info
 
     def get_tracks_info_from_discogs_query(self, artiste, titre):
         from discogs import get_discogs_track_details
@@ -695,7 +757,7 @@ class DiscogsListWindow(QWidget):
 
         #remplissage
         if self.song_info is not None:
-            song_info_from_extract = extraire_informations(self.song_info.old_file_name)
+            song_info_from_extract = extraire_tag_from_filename(self.song_info.old_file_name)
             self.groupeRecherche.zone_texte_Artiste.setText(song_info_from_extract["artiste"])
             self.groupeRecherche.zone_texte_Titre.setText(song_info_from_extract["titre"])
 
@@ -759,8 +821,7 @@ class DiscogsListWindow(QWidget):
         if artiste == '' or titre == '' or self.song_info is None:
             return
 
-        self.song_info.tracks_info.extend(self.song_info.get_tracks_info_from_discogs_query(artiste, titre))
-        self.song_info.tracks_info.extend(self.song_info.get_tracks_info_from_applemusic_query(artiste, titre))
+        self.song_info.tracks_info.extend(self.song_info.get_tracks_info_from_all_bdd(artiste, titre))
         self.ListDiscogs.tableWidget.clearContents()
         self.ListDiscogs.tableWidget.last_filled_row = -1
         if self.song_info is not None:
@@ -878,7 +939,7 @@ class MainWindow(QDialog):
 
     def clickMethodAutoAnalyse(self):
         chaine = self.groupeediteurTag.zoneTextFileName.text()
-        song_info_from_extract = extraire_informations(chaine)
+        song_info_from_extract = extraire_tag_from_filename(chaine)
 
         self.groupeediteurTag.zoneTextTitre.setText(song_info_from_extract["titre"])
         self.groupeediteurTag.zoneTextArtistAsDisplay.setText(song_info_from_extract["artiste"])

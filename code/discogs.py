@@ -191,7 +191,7 @@ def get_discogs_track_details(searched_song, num_results=1):
                 break
         return tags
     except Exception as e:
-        return None
+        return []
 
 # Exemple d'utilisation
 if __name__ == '__main__':
