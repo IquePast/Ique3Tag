@@ -10,6 +10,11 @@ load_dotenv()
 # Récupérer le token depuis l'environnement
 my_discogs_user_token = os.getenv("DISCOGS_USER_TOKEN")
 
+def clean_artist_name(artist_name):
+    import re
+    clean_name = re.sub(r'\s\(\d+\)$', '', artist_name)
+    return clean_name
+
 def search_track_in_tracklist(song, discogs_tracks):
     import difflib
     # Trouver la meilleure correspondance
@@ -89,29 +94,32 @@ def get_discogs_track_details(searched_song, num_results=1):
             mainartist = ''
             try:
                 for artist in track.data['artists']:
-                    mainartist = mainartist + artist['name']
+                    mainartist = mainartist + clean_artist_name(artist['name'])
                     if (artist['join'] != ''): mainartist = mainartist + ' ' + artist['join'] + ' '
-                    if (artist['name'] in songAll) == False: songAll.append(artist['name'])
+                    if (clean_artist_name(artist['name']) in songAll) == False:
+                        songAll.append(clean_artist_name(artist['name']))
             except KeyError:
                 for artist in release.data['artists']:
-                    mainartist = mainartist + artist['name']
+                    mainartist = mainartist + clean_artist_name(artist['name'])
                     if (artist['join'] != ''): mainartist = mainartist + ' ' + artist['join'] + ' '
-                    if (artist['name'] in songAll) == False: songAll.append(artist['name'])
+                    if (clean_artist_name(artist['name']) in songAll) == False:
+                        songAll.append(clean_artist_name(artist['name']))
 
             if mainartist == '':
-                mainartist = release.artists[0].name
+                mainartist = clean_artist_name(release.artists[0].name)
             if not (songAll):
-                songAll.append(release.artists[0].name)
+                songAll.append(clean_artist_name(release.artists[0].name))
 
             # Credits - aditional artists
             try:
                 for artist in track.data['extraartists']:
                     if artist['role'] == 'Featuring' and (artist['name'] in songFt) == False:
-                        songFt.append(artist['name'])
+                        songFt.append(clean_artist_name(artist['name']))
                     elif artist['role'] == 'Remix' and (artist['name'] in songRmx) == False:
-                        songRmx.append(artist['name'])
+                        songRmx.append(clean_artist_name(artist['name']))
 
-                    if (artist['name'] in songAll) == False: songAll.append(artist['name'])
+                    if (clean_artist_name(artist['name']) in songAll) == False:
+                        songAll.append(clean_artist_name(artist['name']))
             except:
                 pass
 
@@ -145,7 +153,7 @@ def get_discogs_track_details(searched_song, num_results=1):
             if release.artists[0].name == 'Various':
                 album_artist = 'Various Artists'
             else:
-                album_artist = release.artists[0].name
+                album_artist = clean_artist_name(release.artists[0].name)
 
             # Style
             listdesStyles = ''
@@ -195,7 +203,7 @@ def get_discogs_track_details(searched_song, num_results=1):
 
 # Exemple d'utilisation
 if __name__ == '__main__':
-    track_name = "Daft Punk - Get Lucky"
+    track_name = "Gregoire - Toi + Moi"
     num_results = 3
 
     track_details = get_discogs_track_details(track_name, num_results)

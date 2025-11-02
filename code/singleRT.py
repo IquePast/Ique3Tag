@@ -271,7 +271,7 @@ class photoViewer:
 
             # Vérifier si le texte du presse-papier est une URL valide
             if clipboard_text.startswith("http://") or clipboard_text.startswith("https://"):
-                pixmap_from_url = self.create_pixmap_from_url(clipboard_text)
+                pixmap_from_url = create_pixmap_from_url(clipboard_text)
                 if not pixmap_from_url.isNull():
                     self.update_from_pixmap(pixmap_from_url)
 
